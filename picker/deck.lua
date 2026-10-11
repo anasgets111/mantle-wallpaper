@@ -1,5 +1,6 @@
 -- The hand: cards on arms turning round a pivot far below the screen.
 local cards = require("picker.card")
+local colours = require("colours")
 local P = require("picker.model")
 local settings = P.settings
 local SIDE = P.SIDE
@@ -19,7 +20,9 @@ local go = P.go
 local pick = P.pick
 
 -- One card in the hand, on an arm that turns round the pivot far below the screen.
-local function arm(k, e, i, idx, moved, is_open, is_dealt, picked, is_dealing)
+-- `at`: what the hand is doing this pass (idx, moved, open, dealt, picked, dealing, known, desk).
+local function arm(k, e, i, at)
+    local idx, moved, is_open, is_dealt, picked, is_dealing = at.idx, at.moved, at.open, at.dealt, at.picked, at.dealing
     local u, m = k.u, k.m
     local d = i - idx
     local ad = math.abs(d)
@@ -82,6 +85,8 @@ local function arm(k, e, i, idx, moved, is_open, is_dealt, picked, is_dealing)
                                 m = m,
                                 hover = hov,
                                 picture = e.path,
+                                scheme = colours.scheme(at.known, e.name),
+                                dress = at.desk,
                                 title = base_name(e.name),
                                 meta = (e.name:match("%.([^.]+)$") or ""):upper(),
                                 front = near,
@@ -107,13 +112,20 @@ local function deck(k)
         height = "fill",
         translate = peek:map(function(on) return { x = 0, y = on and k.peek_drop or 0 } end),
         animate = { translate = { duration = 300, easing = "out_cubic" } },
-        children = computed({ entries, index, shift, open, dealt, chosen, dealing }, function(list, idx, moved, is_open, is_dealt, picked, is_dealing)
-            local out = {}
-            for i = math.max(1, idx - SIDE), math.min(#list, idx + SIDE) do
-                out[#out + 1] = arm(k, list[i], i, idx, moved, is_open, is_dealt, picked, is_dealing)
+        children = computed(
+            { entries, index, shift, open, dealt, chosen, dealing, colours.known, colours.desktop_dress },
+            function(list, idx, moved, is_open, is_dealt, picked, is_dealing, known, desk)
+                local at = {
+                    idx = idx, moved = moved, open = is_open, dealt = is_dealt, picked = picked,
+                    dealing = is_dealing, known = known, desk = desk,
+                }
+                local out = {}
+                for i = math.max(1, idx - SIDE), math.min(#list, idx + SIDE) do
+                    out[#out + 1] = arm(k, list[i], i, at)
+                end
+                return out
             end
-            return out
-        end),
+        ),
     }
 end
 

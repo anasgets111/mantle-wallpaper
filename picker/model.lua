@@ -1,6 +1,7 @@
 -- The picker's state and what changes it: the deck's list, its position, opening, choosing.
 local wallpaper = require("wallpaper")
 local cards = require("picker.card")
+local colours = require("colours")
 
 local settings = wallpaper.settings
 local u_of = function(g) return math.max(0.6, math.min(g.width / 1920, g.height / 1200)) end
@@ -8,7 +9,7 @@ local u_of = function(g) return math.max(0.6, math.min(g.width / 1920, g.height 
 local EXTENSIONS = { "jpg", "jpeg", "png", "webp", "gif" }
 local SIDE = 7 -- cards shown each side of the one in front
 local SOURCES = { "local", "favorites" }
-local SORTS = { "name", "newest" }
+local SORTS = { "name", "colour", "newest" }
 local SORT_LABEL = { name = "by name", colour = "by colour", newest = "newest first" }
 
 local open = state("picker.open", false)
@@ -24,6 +25,9 @@ local dealt = state("picker.dealt", true)
 local chosen = state("picker.chosen", "")
 local stage = state("picker.stage", "") -- "", "rise", "bloom"
 local geo = geometry("picker.root")
+-- The colour sort's keys, taken when it's chosen and when a scan finishes, so the deck doesn't
+-- reshuffle as each colour is read.
+local hues = state("picker.hues", {})
 local dealing = computed({ pulse(open, 800), pulse(dealt, 800) }, function(a, b) return a or b end)
 
 local function dir() return wallpaper.expand(settings.dir:get()) end
@@ -39,20 +43,31 @@ local function has(list, name)
     return false
 end
 
--- The deck: { name, path, modified }, filtered by source and in the chosen order.
-local entries = computed({ mantle.folders, settings.dir, settings.favorites, source, sort }, function(folders, d, favs, src, order)
-    local listing = folders and folders.watched[wallpaper.expand(d)]
+-- Every local wallpaper as listed: { name, path, modified }.
+local listing = computed({ mantle.folders, settings.dir }, function(folders, d)
+    local folder = folders and folders.watched[wallpaper.expand(d)]
+    return folder and folder.entries or {}
+end, {})
+
+-- The deck: { name, path, modified, at }, filtered by source and in the chosen order.
+local entries = computed({ listing, settings.favorites, source, sort, hues }, function(all, favs, src, order, keys)
     local list = {}
-    for i, e in ipairs(listing and listing.entries or {}) do
+    for i, e in ipairs(all) do
         if src ~= "favorites" or has(favs, e.name) then
             list[#list + 1] = { name = e.name, path = e.path, modified = e.modified, at = i }
         end
     end
-    if order == "newest" then
+    local function by(key)
         table.sort(list, function(a, b)
-            if a.modified ~= b.modified then return a.modified > b.modified end
+            local ka, kb = key(a), key(b)
+            if ka ~= kb then return ka < kb end
             return a.at < b.at
         end)
+    end
+    if order == "newest" then
+        by(function(e) return -e.modified end)
+    elseif order == "colour" then
+        by(function(e) return keys[e.name] or 3 end)
     end
     return list
 end, {})
@@ -126,6 +141,29 @@ local function reshuffle(change)
     end)
 end
 
+local function snapshot_hues()
+    local known, keys = colours.known:get(), {}
+    for _, e in ipairs(listing:get()) do keys[e.name] = colours.hue_key(known, e.name) end
+    return keys
+end
+
+local function set_sort(key)
+    if key == sort:get() then return end
+    reshuffle(function()
+        if key == "colour" then hues:set(snapshot_hues()) end
+        sort:set(key)
+    end)
+end
+
+local function set_source(key)
+    if key ~= source:get() then reshuffle(function() source:set(key) end) end
+end
+
+-- The colour sort, once every colour is in.
+colours.on_finished(function()
+    if sort:get() == "colour" and open:get() then reshuffle(function() hues:set(snapshot_hues()) end) end
+end)
+
 local function cycle(list, value, by)
     for n, v in ipairs(list) do
         if v == value then return list[(n - 1 + by) % #list + 1] end
@@ -162,6 +200,11 @@ local function show()
     source:set("local")
     refocus(nil)
     open:set(true)
+    -- Colours for the cards near the one in front first.
+    colours.ensure(listing:get(), function()
+        local e = front_entry()
+        return e and e.at or 1
+    end)
 end
 
 action("wallpaper.toggle", function()
@@ -183,6 +226,13 @@ local function pick()
         if chosen:get() == e.path and open:get() then close() end
     end)
 end
+
+-- The colours the picker wears: the card in front's scheme, else the desktop's.
+local tint = computed({ entries, index, colours.known, colours.desktop_dress }, function(list, i, known, desk)
+    local e = list[i]
+    local s = e and colours.scheme(known, e.name)
+    return s and colours.dress_of(s) or desk
+end)
 
 -- A drag turning the deck is not a click.
 local drag = { moved = false }
@@ -208,6 +258,10 @@ return {
     base_name = base_name,
     has = has,
     entries = entries,
+    listing = listing,
+    tint = tint,
+    set_sort = set_sort,
+    set_source = set_source,
     front_entry = front_entry,
     hand = hand,
     theta = theta,

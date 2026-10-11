@@ -1,6 +1,9 @@
 -- The wallpaper on every output, and the commands that change it:
 --   mantle call wallpaper.set <file>   absolute, ~/, file:// or a name inside the folder
 --   mantle call wallpaper.current
+local theme = require("theme")
+local colours = require("colours")
+
 local M = {}
 
 local HOME = os.getenv("HOME") or ""
@@ -27,6 +30,9 @@ M.settings = persistent_table {
         current = "",
         transition = "random", -- a name from TRANSITIONS, or "random"
         favorites = {}, -- file names
+        -- matugen-style templates rendered with the wallpaper's colours on each change:
+        -- { { input = "~/x.tpl", output = "~/.config/x", hook = "shell command" }, ... }
+        templates = {},
     },
 }
 
@@ -68,9 +74,6 @@ end
 action("wallpaper.set", function(path) return M.set(path) end)
 action("wallpaper.current", function() return M.settings.current:get() end)
 
--- ponytail: a fixed accent until the palette slice derives one from the wallpaper.
-local ACCENT = { 0.80, 0.65, 0.97 }
-
 M.panel = panel {
     id = "wallpaper",
     layer = "background",
@@ -84,13 +87,13 @@ M.panel = panel {
         height = "fill",
         async = true,
         source = M.settings.current,
-        transition = computed({ mode, M.instant }, function(m, instant)
+        transition = computed({ mode, M.instant, colours.desktop_dress }, function(m, instant, dress)
             local name = M.TRANSITIONS[m + 1]
             return {
                 duration = instant and 1 or DURATION[name] or 1100,
                 easing = "in_out_cubic",
                 shader = mantle.config_dir .. "/shaders/transition.frag",
-                params = { mode = m, edge_color = ACCENT },
+                params = { mode = m, edge_color = theme.rgb(dress.accent) },
             }
         end),
     },

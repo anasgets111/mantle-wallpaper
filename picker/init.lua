@@ -12,6 +12,7 @@
 local chrome = require("picker.chrome")
 local deck = require("picker.deck")
 local flight = require("picker.flight")
+local ribbon = require("picker.ribbon")
 local P = require("picker.model")
 local SIDE = P.SIDE
 local SOURCES = P.SOURCES
@@ -29,7 +30,6 @@ local entries = P.entries
 local hand = P.hand
 local go = P.go
 local step = P.step
-local reshuffle = P.reshuffle
 local cycle = P.cycle
 local toggle_favourite = P.toggle_favourite
 local close = P.close
@@ -57,13 +57,11 @@ local function on_key(key)
         if not key["repeat"] then peek:set(not peek:get()) end
     elseif name == "f" or name == "F" then toggle_favourite()
     elseif name == "s" or name == "S" then
-        local next_sort = cycle(SORTS, sort:get(), 1)
-        reshuffle(function() sort:set(next_sort) end)
+        P.set_sort(cycle(SORTS, sort:get(), 1))
     elseif name == "r" or name == "R" then
         if count > 1 then go((index:get() + math.random(1, count - 1) - 1) % count + 1) end
     elseif name == "Tab" or name == "ISO_Left_Tab" then
-        local next_source = cycle(SOURCES, source:get(), name == "Tab" and 1 or -1)
-        reshuffle(function() source:set(next_source) end)
+        P.set_source(cycle(SOURCES, source:get(), name == "Tab" and 1 or -1))
     else
         return false
     end
@@ -151,6 +149,7 @@ local function layers(g)
         deck(k),
         chrome.actions(k),
         chrome.head(k),
+        ribbon(k),
         chrome.hints(k),
         chrome.empty(k),
         chrome.peek_hint(k),

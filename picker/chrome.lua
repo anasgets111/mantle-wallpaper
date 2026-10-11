@@ -12,12 +12,21 @@ local dealt = P.dealt
 local chosen = P.chosen
 local has = P.has
 local entries = P.entries
-local reshuffle = P.reshuffle
 local toggle_favourite = P.toggle_favourite
 local close = P.close
 local pick = P.pick
 
-local D = theme.DRESS
+local colours = require("colours")
+local tint = P.tint
+
+-- The picker wears the card in front's colours, changing over 420 ms.
+local FADE = { duration = 420, easing = "out_cubic" }
+-- A hover answers at once; only the tint itself fades.
+local SNAP = { duration = 90, easing = "out_cubic" }
+local function C(key, a)
+    return tint:map(function(d) return a and theme.alpha(d[key], a) or d[key] end)
+end
+local SPINNER = mantle.config_dir .. "/shaders/spinner.frag"
 
 -- Fades with the picker: in over 380 ms, out over 240.
 local SHOWN = computed({ open, chosen }, function(on, c)
@@ -26,10 +35,26 @@ local SHOWN = computed({ open, chosen }, function(on, c)
 end)
 
 local function glass(props)
-    props.background = props.background or theme.alpha(D.low, 0.8)
+    props.background = props.background or C("low", 0.8)
     props.border_width = 1
-    props.border_color = theme.alpha(D.ink, 0.12)
+    props.border_color = C("ink", 0.12)
+    props.animate = props.animate or {}
+    props.animate.background = FADE
+    props.animate.border_color = FADE
     return row(props)
+end
+
+-- The indeterminate loading ring, `size` px across.
+local function spinner(size, u)
+    return shader {
+        width = size,
+        height = size,
+        align_v = "center",
+        source = SPINNER,
+        params = tint:map(function(d) return { color = theme.rgb(d.accent), line = 2 * u } end),
+        progress = 18,
+        animate = { progress = { duration = 18 * 1440, easing = "linear", keyframes = { 0, 18 }, loops = "infinite" } },
+    }
 end
 
 local function round_button(id, icon, u, on_click)
@@ -39,11 +64,12 @@ local function round_button(id, icon, u, on_click)
         height = 40 * u,
         radius = 20 * u,
         hover = hov,
-        background = hov:map(function(on) return theme.alpha(D.low, on and 0.95 or 0.8) end),
+        background = computed({ hov, tint }, function(on, d) return theme.alpha(d.low, on and 0.95 or 0.8) end),
         border_width = 1,
-        border_color = theme.alpha(D.ink, 0.12),
+        border_color = C("ink", 0.12),
+        animate = { background = SNAP, border_color = FADE },
         on_click = on_click,
-        children = { theme.glyph(icon, 19 * u, D.ink) },
+        children = { theme.glyph(icon, 19 * u, C("ink")) },
     }
 end
 
@@ -59,12 +85,13 @@ local function segments(id, options, value, u, on_pick)
             spacing = 6 * u,
             radius = 16 * u,
             hover = hov,
-            background = computed({ current, hov }, function(on, over)
-                return on and D.accent or over and theme.alpha(D.ink, 0.08) or "#00000000"
+            background = computed({ current, hov, tint }, function(on, over, d)
+                return on and d.accent or over and theme.alpha(d.ink, 0.08) or "#00000000"
             end),
+            animate = { background = SNAP },
             on_click = function() on_pick(o.key) end,
             children = {
-                theme.glyph(o.icon, 17 * u, current:map(function(on) return on and D.accent_ink or D.muted end), {
+                theme.glyph(o.icon, 17 * u, computed({ current, tint }, function(on, d) return on and d.accent_ink or d.muted end), {
                     variations = current:map(function(on) return { FILL = on and 1 or 0, wght = 500 } end),
                 }),
                 text {
@@ -72,7 +99,8 @@ local function segments(id, options, value, u, on_pick)
                     align_v = "center",
                     font_size = 13 * u,
                     font_weight = 600,
-                    foreground = current:map(function(on) return on and D.accent_ink or D.ink end),
+                    foreground = computed({ current, tint }, function(on, d) return on and d.accent_ink or d.ink end),
+                    animate = { foreground = FADE },
                 },
             },
         }
@@ -111,7 +139,7 @@ local function head(k)
                 align_v = "center",
                 spacing = 12 * u,
                 children = {
-                    theme.glyph("style", 28 * u, D.accent, { filled = true }),
+                    theme.glyph("style", 28 * u, C("accent"), { filled = true }),
                     column {
                         align_v = "center",
                         children = {
@@ -129,7 +157,7 @@ local function head(k)
                         { key = "local", label = "Local", icon = "photo_library" },
                         { key = "favorites", label = fav_label, icon = "favorite" },
                     }, source, u, function(key)
-                        if key ~= source:get() then reshuffle(function() source:set(key) end) end
+                        P.set_source(key)
                     end),
                 },
             },
@@ -138,11 +166,33 @@ local function head(k)
                 align_v = "center",
                 spacing = 8 * u,
                 children = {
+                    -- Reading colours (the first time, or new wallpapers).
+                    glass {
+                        visible = colours.progress:map(function(p) return p.total > 0 end),
+                        align_v = "center",
+                        height = 40 * u,
+                        padding = { left = 12 * u, right = 12 * u },
+                        spacing = 8 * u,
+                        radius = 20 * u,
+                        children = {
+                            spinner(14 * u, u),
+                            text {
+                                align_v = "center",
+                                content = colours.progress:map(function(p)
+                                    return "Reading colours  " .. p.read .. " / " .. p.total
+                                end),
+                                font_size = 12 * u,
+                                foreground = C("muted"),
+                                animate = { foreground = FADE },
+                            },
+                        },
+                    },
                     segments("sort", {
                         { key = "name", label = "Name", icon = "sort_by_alpha" },
+                        { key = "colour", label = "Colour", icon = "palette" },
                         { key = "newest", label = "Newest", icon = "schedule" },
                     }, sort, u, function(key)
-                        if key ~= sort:get() then reshuffle(function() sort:set(key) end) end
+                        P.set_sort(key)
                     end),
                     round_button("peek", "visibility", u, function() peek:set(not peek:get()) end),
                     round_button("close", "close", u, close),
@@ -161,7 +211,7 @@ local function hints(k)
         height = 28 * u,
         padding = { left = 14 * u, right = 14 * u },
         radius = 20 * u,
-        background = theme.alpha(D.low, 0.6),
+        background = C("low", 0.6),
         visible = entries:map(function(list) return #list > 0 end),
         opacity = computed({ peek, chosen }, function(p, c) return (p or c ~= "") and 0 or 1 end),
         animate = { opacity = { duration = 300, easing = "out_cubic" } },
@@ -170,7 +220,8 @@ local function hints(k)
                 align_v = "center",
                 content = "←→ or wheel browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  Space peek  ·  Tab source  ·  Esc close",
                 font_size = 12 * u,
-                foreground = theme.alpha(D.ink, 0.78),
+                foreground = C("ink", 0.78),
+                animate = { foreground = FADE },
             },
         },
     }
@@ -205,12 +256,13 @@ local function actions(k)
                 height = 40 * u,
                 radius = 20 * u,
                 hover = fav_hover,
-                background = fav_hover:map(function(on) return theme.alpha(D.low, on and 0.95 or 0.78) end),
+                background = computed({ fav_hover, tint }, function(on, d) return theme.alpha(d.low, on and 0.95 or 0.78) end),
                 border_width = 1,
-                border_color = theme.alpha(D.ink, 0.14),
+                border_color = C("ink", 0.14),
+                animate = { background = SNAP, border_color = FADE },
                 on_click = toggle_favourite,
                 children = {
-                    theme.glyph("favorite", 20 * u, fav:map(function(on) return on and "#ff5c7a" or D.ink end), {
+                    theme.glyph("favorite", 20 * u, computed({ fav, tint }, function(on, d) return on and "#ff5c7a" or d.ink end), {
                         variations = fav:map(function(on) return { FILL = on and 1 or 0, wght = 500 } end),
                         translate = { x = 0, y = 1 },
                     }),
@@ -222,19 +274,20 @@ local function actions(k)
                 spacing = 8 * u,
                 radius = 20 * u,
                 hover = set_hover,
-                background = computed({ active, set_hover }, function(on, over)
-                    if on then return theme.alpha(D.low, 0.82) end
-                    return over and theme.lighter(D.accent, 1.08) or D.accent
+                background = computed({ active, set_hover, tint }, function(on, over, d)
+                    if on then return theme.alpha(d.low, 0.82) end
+                    return over and theme.lighter(d.accent, 1.08) or d.accent
                 end),
                 border_width = active:map(function(on) return on and 1 or 0 end),
-                border_color = theme.alpha(D.ink, 0.14),
+                border_color = C("ink", 0.14),
+                animate = { background = SNAP, border_color = FADE },
                 cursor = active:map(function(on) return on and "default" or "pointer" end),
                 on_click = pick,
                 children = {
                     theme.glyph(
                         active:map(function(on) return on and "check_circle" or "wallpaper" end),
                         19 * u,
-                        active:map(function(on) return on and D.accent or D.accent_ink end),
+                        computed({ active, tint }, function(on, d) return on and d.accent or d.accent_ink end),
                         { variations = active:map(function(on) return { FILL = on and 1 or 0, wght = 500 } end) }
                     ),
                     text {
@@ -242,7 +295,8 @@ local function actions(k)
                         content = active:map(function(on) return on and "On your desktop" or "Set wallpaper" end),
                         font_size = 14 * u,
                         font_weight = 600,
-                        foreground = active:map(function(on) return on and D.ink or D.accent_ink end),
+                        foreground = computed({ active, tint }, function(on, d) return on and d.ink or d.accent_ink end),
+                        animate = { foreground = FADE },
                     },
                     rect {
                         visible = active:map(function(on) return not on end),
@@ -250,7 +304,8 @@ local function actions(k)
                         height = 20 * u,
                         padding = { left = 5 * u, right = 5 * u },
                         radius = 6 * u,
-                        background = theme.alpha(D.accent_ink, 0.14),
+                        background = C("accent_ink", 0.14),
+                        animate = { background = FADE },
                         children = {
                             text {
                                 align_h = "center",
@@ -258,7 +313,7 @@ local function actions(k)
                                 content = "⏎",
                                 font_size = 12 * u,
                                 font_weight = 700,
-                                foreground = D.accent_ink,
+                                foreground = C("accent_ink"),
                             },
                         },
                     },
@@ -316,16 +371,16 @@ local function peek_hint(k)
                 content = computed({ entries, index }, function(list, i) return list[i] and list[i].name or "" end),
                 font_size = 13 * u,
                 font_weight = 600,
-                foreground = D.ink,
+                foreground = C("ink"),
             },
             text {
                 align_v = "center",
                 content = "←→ browse  ·  Space or Esc: back to the deck",
                 font_size = 12 * u,
-                foreground = D.muted,
+                foreground = C("muted"),
             },
         },
     }
 end
 
-return { D = D, SHOWN = SHOWN, glass = glass, head = head, hints = hints, actions = actions, empty = empty, peek_hint = peek_hint }
+return { C = C, FADE = FADE, SHOWN = SHOWN, glass = glass, head = head, hints = hints, actions = actions, empty = empty, peek_hint = peek_hint }

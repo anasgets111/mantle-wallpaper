@@ -1,11 +1,11 @@
 local theme = require("theme")
 local cards = require("picker.card")
+local colours = require("colours")
 local P = require("picker.model")
 local settings = P.settings
 local peek = P.peek
 local base_name = P.base_name
 local has = P.has
-local D = theme.DRESS
 local SHINE = mantle.config_dir .. "/shaders/shine.frag"
 
 -- The chosen card, from its place in the hand to the middle of the screen; once set (`st` is
@@ -15,6 +15,8 @@ local function flight(k, path, st)
     local u, m = k.u, k.m
     local blooming = st == "bloom"
     local name = path:match("[^/]*$")
+    local scheme = colours.scheme(colours.known:get(), name)
+    local D = scheme and colours.dress_of(scheme) or colours.desktop_dress:get()
     local front_y = k.pivot_y - k.r - k.lift - k.h / 2 + (peek:get() and k.peek_drop or 0)
     local k_mid = k.mid_scale
     local ring_r = 64 * u
@@ -22,6 +24,8 @@ local function flight(k, path, st)
         cards.card {
             m = m,
             picture = path,
+            scheme = scheme,
+            dress = D,
             title = base_name(name),
             meta = (name:match("%.([^.]+)$") or ""):upper(),
             front = 1,

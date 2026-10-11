@@ -39,6 +39,21 @@ function M.ink_on(c)
     return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5 and "#000000c7" or "#ffffffe6"
 end
 
+-- Hue (0..1, -1 for a grey), saturation and lightness, as Qt's hslHue/hslSaturation/hslLightness.
+function M.hsl(c)
+    local r, g, b = parse(c)
+    local hi, lo = math.max(r, g, b), math.min(r, g, b)
+    local l = (hi + lo) / 2
+    if hi == lo then return -1, 0, l end
+    local d = hi - lo
+    local s = l > 0.5 and d / (2 - hi - lo) or d / (hi + lo)
+    local h
+    if hi == r then h = (g - b) / d + (g < b and 6 or 0)
+    elseif hi == g then h = (b - r) / d + 2
+    else h = (r - g) / d + 4 end
+    return h / 6, s, l
+end
+
 -- `c` as a shader `vec3`.
 function M.rgb(c)
     local r, g, b = parse(c)

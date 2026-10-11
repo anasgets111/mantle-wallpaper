@@ -2,6 +2,7 @@
 -- wallpaper would give the desktop: the card is its surface, the text its on-surface, the strip
 -- of chips its roles.
 local theme = require("theme")
+local colours = require("colours")
 
 local M = {}
 
@@ -66,20 +67,47 @@ function M.tag(opts, dress, u)
     }
 end
 
--- opts: m (measure), picture, title, meta, dress, front (0..1), dim, hovered, current,
--- favourite, pop (the "current" tag pops in), on_click, hover.
+-- opts: m (measure), picture, title, meta, scheme (nil until read), dress (worn without a
+-- scheme), front (0..1), dim, current, favourite, pop (the "current" tag pops in), on_click, hover.
 function M.card(opts)
-    local m, dress, u = opts.m, opts.dress or theme.DRESS, opts.m.u
+    local m, u = opts.m, opts.m.u
+    local dress = opts.scheme and colours.dress_of(opts.scheme) or opts.dress or theme.DRESS
+    local specs = opts.scheme and colours.chips(opts.scheme) or {}
     local front = opts.front or 0
     local chips = {}
     for i = 1, 5 do
         local r = m.thumb_radius * 0.7
+        local spec = specs[i]
+        -- Not read yet: a quiet ramp of the card's own colour.
+        local fill = spec and spec.fill or theme.tint(dress.raised, theme.alpha("#ffffff", 0.02 + 0.025 * (5 - i)))
+        local ink = theme.ink_on(fill)
         chips[i] = rect {
             width = m.thumb.width,
             height = m.chip_h,
             radius = i == 1 and { top_left = r, top_right = r } or i == 5 and { bottom_left = r, bottom_right = r } or 0,
-            -- Not read yet: a quiet ramp of the card's own colour.
-            background = theme.tint(dress.raised, theme.alpha("#ffffff", 0.02 + 0.025 * (5 - i))),
+            background = fill,
+            children = spec and {
+                text {
+                    align_v = "center",
+                    margin = { left = 8 * u },
+                    content = spec.label:upper(),
+                    font_size = 8.5 * u,
+                    font_weight = 700,
+                    letter_spacing = 1.1 * u,
+                    foreground = ink,
+                    opacity = 0.85,
+                },
+                text {
+                    align_h = "end",
+                    align_v = "center",
+                    margin = { right = 8 * u },
+                    content = spec.fill:upper(),
+                    font = theme.MONO,
+                    font_size = 9.5 * u,
+                    font_weight = 500,
+                    foreground = ink,
+                },
+            } or {},
         }
     end
     return rect {
