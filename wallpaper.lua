@@ -26,6 +26,7 @@ M.settings = persistent_table {
         dir = "~/Pictures/wallpapers",
         current = "",
         transition = "random", -- a name from TRANSITIONS, or "random"
+        favorites = {}, -- file names
     },
 }
 
@@ -34,6 +35,8 @@ function M.expand(path)
 end
 
 local mode = state("wallpaper.mode", MODE.grow)
+-- True while the picker covers the screen: the change goes in at once, under it.
+M.instant = state("wallpaper.instant", false)
 
 local function pick_mode()
     local name = M.settings.transition:get()
@@ -45,7 +48,7 @@ local function pick_mode()
     return next_mode >= mode:get() and next_mode + 1 or next_mode
 end
 
-function M.set(path)
+function M.set(path, instant)
     path = tostring(path or ""):gsub("^file://", "")
     if path == "" then
         return nil
@@ -55,13 +58,14 @@ function M.set(path)
     end
     path = M.expand(path)
     if path ~= M.settings.current:get() then
+        M.instant:set(instant == true)
         mode:set(pick_mode())
         M.settings:set("current", path)
     end
     return path
 end
 
-action("wallpaper.set", M.set)
+action("wallpaper.set", function(path) return M.set(path) end)
 action("wallpaper.current", function() return M.settings.current:get() end)
 
 -- ponytail: a fixed accent until the palette slice derives one from the wallpaper.
@@ -80,10 +84,10 @@ M.panel = panel {
         height = "fill",
         async = true,
         source = M.settings.current,
-        transition = mode:map(function(m)
+        transition = computed({ mode, M.instant }, function(m, instant)
             local name = M.TRANSITIONS[m + 1]
             return {
-                duration = DURATION[name] or 1100,
+                duration = instant and 1 or DURATION[name] or 1100,
                 easing = "in_out_cubic",
                 shader = mantle.config_dir .. "/shaders/transition.frag",
                 params = { mode = m, edge_color = ACCENT },
