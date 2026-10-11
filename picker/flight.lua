@@ -96,6 +96,7 @@ local function flight(k, f)
                             front = 1,
                             current = true,
                             pop = RISE,
+            playing = f.live,
                             favourite = P.settings.favorites:map(function(favs) return P.has(favs, name) end),
                         },
                         rect {
@@ -149,6 +150,7 @@ local function flight(k, f)
                     height = k.h,
                     source = f.path,
                     async = true,
+                    playing = f.live,
                     scale = 1,
                     animate = {
                         scale = grow(math.max(m.thumb.width * k_mid / k.w, m.thumb.height * k_mid / k.h)),

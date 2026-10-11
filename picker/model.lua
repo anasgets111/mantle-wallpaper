@@ -30,7 +30,7 @@ dealt:set(true)
 local chosen = state("picker.chosen", "")
 -- The chosen card as it was chosen: { path, scheme, dress, peek }, so its flight doesn't follow
 -- later changes; false the rest of the time.
----@alias Flown { path: string, scheme: table|false, dress: table, meta: string, peek: boolean }|false
+---@alias Flown { path: string, scheme: table|false, dress: table, meta: string, peek: boolean, live: boolean }|false
 ---@type StateSignal<Flown>
 local flown = state("picker.flown", false)
 local settings_open = state("picker.settings_open", false)
@@ -200,6 +200,19 @@ local function cycle(list, value, by)
     return list[1]
 end
 
+-- The live preview: an animated wallpaper plays in the preview and the card in front, once the
+-- deck has been still for 700 ms.
+local has_motion = listing:map(function(all)
+    for _, e in ipairs(all) do
+        if e.name:lower():match("%.gif$") then return true end
+    end
+    return false
+end)
+local live_playing = computed({ settings.live_preview, index, delay(index, 700) }, function(live, i, was)
+    return live == true and i == was
+end)
+local function toggle_live() settings:set("live_preview", not settings.live_preview:get()) end
+
 local function toggle_favourite()
     local e = front_entry()
     if not e then return end
@@ -263,8 +276,9 @@ local function pick()
         path = e.path,
         scheme = scheme or false,
         dress = scheme and colours.dress_of(scheme) or colours.desktop_dress:get(),
-        meta = cards.meta(e),
+        meta = cards.meta(e, image_status("picker.card:" .. e.path):get()),
         peek = peeking:get(),
+        live = live_playing:get(),
     })
     wallpaper.set(e.path, true)
     -- The flight's animations end here (flight.lua); nothing reports it, so a timer closes.
@@ -314,6 +328,9 @@ return {
     entries = entries,
     listing = listing,
     tint = tint,
+    has_motion = has_motion,
+    live_playing = live_playing,
+    toggle_live = toggle_live,
     settings_open = settings_open,
     set_settings = set_settings,
     set_sort = set_sort,

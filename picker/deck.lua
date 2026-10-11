@@ -43,6 +43,7 @@ local function arm(k, e, moved, scheme, desk)
     local entering = moved ~= 0
     local rotate_from = entering and P.theta(k, first.d + moved) or P.theta(k, first.d) + tilt(first)
     local hov = hover("picker.card:" .. e.path)
+    local status = image_status("picker.card:" .. e.path)
     return rect {
         width = m.width,
         height = k.r + m.height / 2,
@@ -98,7 +99,11 @@ local function arm(k, e, moved, scheme, desk)
                                 scheme = scheme,
                                 dress = desk,
                                 title = P.base_name(e.name),
-                                meta = cards.meta(e),
+                                meta = status:map(function(s) return cards.meta(e, s) end),
+                                status = status,
+                                playing = computed({ place, P.live_playing }, function(p, live)
+                                    return live and p.near == 1
+                                end),
                                 front = place:map(function(p) return p.near end),
                                 dim = computed({ hov, place }, function(on, p)
                                     return on and 0 or math.min(0.3, math.max(0, p.ad - 0.6) * 0.065)

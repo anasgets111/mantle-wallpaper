@@ -66,6 +66,8 @@ local function on_key(key)
         if not again then P.toggle_favourite() end
     elseif name == "s" or name == "S" then
         if not again then P.set_sort(cycle(SORTS, sort:get(), 1)) end
+    elseif name == "v" or name == "V" then
+        if not again and P.has_motion:get() then P.toggle_live() end
     elseif name == "r" or name == "R" then
         if count > 1 then go((index:get() + math.random(1, count - 1) - 1) % count + 1) end
     elseif name == "Tab" or name == "ISO_Left_Tab" then
@@ -130,6 +132,8 @@ local function layers(g)
             async = true,
             source = backdrop_source,
             transition = { duration = 520, easing = "linear", shader = BACKDROP },
+            status = image_status("picker.backdrop"),
+            playing = P.live_playing,
         },
         -- Shade at the head and the foot, so the header and the deck read on any picture.
         rect {
@@ -166,6 +170,7 @@ local function layers(g)
                 chrome.hints(k),
                 chrome.empty(k),
                 chrome.peek_hint(k),
+                chrome.failed(k),
             },
         },
         settings_card(k),

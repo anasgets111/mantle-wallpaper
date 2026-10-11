@@ -62,19 +62,26 @@ local function spinner(size, u)
     }
 end
 
-local function round_button(id, icon, u, on_click)
+-- `checked` (a boolean signal, optional): a toggle that's on is filled with the accent.
+local function round_button(id, icon, u, on_click, checked)
     local hov = hover("picker.button:" .. id)
+    checked = checked or tint:map(function() return false end)
     return rect {
         width = 40 * u,
         height = 40 * u,
         radius = 20 * u,
         hover = hov,
-        background = computed({ hov, tint }, function(on, d) return theme.alpha(d.low, on and 0.95 or 0.8) end),
-        border_width = 1,
+        background = computed({ checked, hov, tint }, function(on, over, d)
+            if on then return over and theme.lighter(d.accent, 1.08) or d.accent end
+            return theme.alpha(d.low, over and 0.95 or 0.8)
+        end),
+        border_width = checked:map(function(on) return on and 0 or 1 end),
         border_color = C("ink", 0.12),
         animate = { background = SNAP, border_color = FADE },
         on_click = on_click,
-        children = { theme.glyph(icon, 19 * u, C("ink")) },
+        children = {
+            theme.glyph(icon, 19 * u, computed({ checked, tint }, function(on, d) return on and d.accent_ink or d.ink end)),
+        },
     }
 end
 
@@ -200,6 +207,19 @@ local function head(k)
                         { key = "newest", label = "Newest", icon = "schedule" },
                     }, sort, u, P.set_sort),
                     round_button("settings", "settings", u, function() P.set_settings(not P.settings_open:get()) end),
+                    -- The live preview: shown only when something in the folder moves.
+                    rect {
+                        visible = P.has_motion,
+                        children = {
+                            round_button(
+                                "live",
+                                P.settings.live_preview:map(function(on) return on and "motion_photos_on" or "motion_photos_off" end),
+                                u,
+                                P.toggle_live,
+                                P.settings.live_preview:map(function(on) return on == true end)
+                            ),
+                        },
+                    },
                     round_button("peek", "visibility", u, function() peek:set(not peek:get()) end),
                     round_button("close", "close", u, close),
                 },
@@ -223,7 +243,10 @@ local function hints(k)
         children = {
             text {
                 align_v = "center",
-                content = "←→ or wheel browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  Space peek  ·  Tab source  ·  Esc close",
+                content = P.has_motion:map(function(motion)
+                    return "←→ or wheel browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  Space peek  ·  "
+                        .. (motion and "V live preview  ·  " or "") .. "Tab source  ·  Esc close"
+                end),
                 font_size = 12 * u,
                 foreground = C("ink", 0.78),
                 animate = { foreground = FADE },
@@ -414,4 +437,24 @@ local function peek_hint(k)
     }
 end
 
-return { C = C, SHOWN = SHOWN, head = head, hints = hints, actions = actions, empty = empty, peek_hint = peek_hint }
+-- The preview's picture couldn't be read.
+local function failed(k)
+    local u = k.u
+    return glass {
+        align_h = "end",
+        margin = { right = 40 * u, top = (28 + 44 + 18 + 26 + 16) * u },
+        height = 34 * u,
+        padding = { left = 12 * u, right = 12 * u },
+        spacing = 8 * u,
+        radius = 20 * u,
+        visible = computed({ image_status("picker.backdrop"), P.choosing }, function(s, c)
+            return s ~= nil and s.state == "failed" and not c
+        end),
+        children = {
+            theme.glyph("broken_image", 16 * u, C("ink")),
+            text { align_v = "center", content = "Couldn't load this picture", font_size = 12 * u, foreground = C("ink") },
+        },
+    }
+end
+
+return { failed = failed, C = C, SHOWN = SHOWN, head = head, hints = hints, actions = actions, empty = empty, peek_hint = peek_hint }

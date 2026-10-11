@@ -38,9 +38,11 @@ local function bytes(n)
     return math.max(1, math.floor(n / 1024 + 0.5)) .. " KB"
 end
 
--- The line under a card's name: `JPG  ·  2.4 MB`.
-function M.meta(e)
+-- The line under a card's name: `JPG  ·  3840 × 2160  ·  2.4 MB`; `status` is its picture's
+-- image_status, which knows the size once it's read.
+function M.meta(e, status)
     local parts = { (e.name:match("%.([^.]+)$") or ""):upper() }
+    if status and status.width then parts[#parts + 1] = status.width .. " × " .. status.height end
     if e.size and e.size > 0 then parts[#parts + 1] = bytes(e.size) end
     return table.concat(parts, "  ·  ")
 end
@@ -88,7 +90,8 @@ end
 
 -- opts: m (measure), picture, title, meta, scheme (nil until read), dress (worn without a
 -- scheme), front (0..1, or a signal), dim, current (true or a signal), favourite, pop (ms until the
--- "current" tag pops in), hover, on_click, on_double_click.
+-- "current" tag pops in), hover, on_click, on_double_click, status (the picture's image_status, so it
+-- fades in once decoded), playing (an animated picture plays; false holds it).
 function M.card(opts)
     local m, u = opts.m, opts.m.u
     local dress = opts.scheme and colours.dress_of(opts.scheme) or opts.dress or theme.DRESS
@@ -169,6 +172,12 @@ function M.card(opts)
                                 radius = m.thumb_radius,
                                 source = opts.picture,
                                 async = true,
+                                status = opts.status,
+                                playing = opts.playing or false,
+                                opacity = opts.status and opts.status:map(function(s)
+                                    return s and s.state == "ready" and 1 or 0
+                                end) or 1,
+                                animate = { opacity = 220 },
                             },
                             rect {
                                 id = "favourite",

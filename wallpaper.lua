@@ -31,6 +31,7 @@ M.settings = persistent_table {
         transition = "random", -- a name from TRANSITIONS, or "random"
         favorites = {}, -- file names
         animate_choice = true, -- a chosen card grows into the wallpaper, then the picker closes
+        live_preview = false, -- animated wallpapers play in the preview and the card in front
         -- matugen-style templates rendered with the wallpaper's colours on each change:
         -- { { input = "~/x.tpl", output = "~/.config/x", hook = "shell command" }, ... }
         templates = {},
