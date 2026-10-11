@@ -14,10 +14,7 @@ set rises to the middle of the screen, lights up, and grows into the wallpaper.
 ## About this port
 
 The port was written with [Claude Code](https://claude.com/claude-code) as an experiment: how far a
-QML/Quickshell config translates 1:1 to a Lua-declared Mantle shell. Where Mantle couldn't express
-something, the engine gained it rather than the port working around it: `on_key_release`,
-`on_double_click`, drag velocity, `elide = "middle"`, file size in folder listings, `image_status`
-and `image.playing` all came out of this port. The Lua is the result of that experiment, reviewed
+QML/Quickshell config translates 1:1 to a Lua-declared Mantle shell. The Lua is the result of that experiment, reviewed
 but not battle-tested; expect rough edges.
 
 ## What it does
