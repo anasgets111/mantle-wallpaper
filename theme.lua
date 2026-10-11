@@ -10,7 +10,6 @@ local function hex(r, g, b, a)
     local function byte(v) return math.floor(math.max(0, math.min(1, v)) * 255 + 0.5) end
     return string.format("#%02x%02x%02x%02x", byte(r), byte(g), byte(b), byte(a or 1))
 end
-M.hex = hex
 
 -- `c` with alpha `a`.
 function M.alpha(c, a)
@@ -48,9 +47,13 @@ function M.hsl(c)
     local d = hi - lo
     local s = l > 0.5 and d / (2 - hi - lo) or d / (hi + lo)
     local h
-    if hi == r then h = (g - b) / d + (g < b and 6 or 0)
-    elseif hi == g then h = (b - r) / d + 2
-    else h = (r - g) / d + 4 end
+    if hi == r then
+        h = (g - b) / d + (g < b and 6 or 0)
+    elseif hi == g then
+        h = (b - r) / d + 2
+    else
+        h = (r - g) / d + 4
+    end
     return h / 6, s, l
 end
 

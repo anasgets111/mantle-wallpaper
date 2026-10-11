@@ -6,8 +6,12 @@ local cards = require("picker.card")
 local P = require("picker.model")
 local SHINE = mantle.config_dir .. "/shaders/shine.frag"
 
-local RISE = 1250 -- to the middle
+local RISE = 1250      -- to the middle
 local SET = RISE + 900 -- the card falls away and the picture grows
+
+-- The ring and the growing picture each start from a size and ease out over one duration.
+local function ring(from) return { duration = 800, easing = "out_cubic", delay = RISE, from = from } end
+local function grow(from) return { duration = 1000, easing = "in_out_cubic", delay = SET, from = from } end
 
 -- `f`: the chosen card as it was chosen, { path, scheme, dress, peek } (model.lua).
 local function flight(k, f)
@@ -30,7 +34,6 @@ local function flight(k, f)
                 translate = { duration = RISE, easing = "in_out_cubic", from = { x = 0, y = front_y } },
             },
             children = {
-                -- The glow behind it: up on the way, gone as the card falls away.
                 rect {
                     width = "fill",
                     height = "fill",
@@ -39,12 +42,11 @@ local function flight(k, f)
                     opacity = 0,
                     animate = { opacity = { duration = RISE, keyframes = {
                         0,
-                        { value = 1, duration = RISE, easing = "in_quad" },
+                        { value = 1, duration = RISE,      easing = "in_quad" },
                         { value = 1, duration = SET - RISE },
-                        { value = 0, duration = 380, easing = "out_quad" },
+                        { value = 0, duration = 380,       easing = "out_quad" },
                     } } },
                 },
-                -- A ring goes out from the card as it's set.
                 rect {
                     align_h = "center",
                     align_v = "center",
@@ -55,10 +57,10 @@ local function flight(k, f)
                     border_color = D.accent,
                     opacity = 0,
                     animate = {
-                        width = { duration = 800, easing = "out_cubic", delay = RISE, from = m.width },
-                        height = { duration = 800, easing = "out_cubic", delay = RISE, from = m.height },
-                        radius = { duration = 800, easing = "out_cubic", delay = RISE, from = m.radius },
-                        border_width = { duration = 800, easing = "out_cubic", delay = RISE, from = 2.4 * u },
+                        width = ring(m.width),
+                        height = ring(m.height),
+                        radius = ring(m.radius),
+                        border_width = ring(2.4 * u),
                         opacity = { duration = 800, keyframes = {
                             0,
                             { value = 0, duration = RISE },
@@ -67,7 +69,6 @@ local function flight(k, f)
                         } },
                     },
                 },
-                -- It pulses as it's set, then falls away from round its picture.
                 rect {
                     scale = 1,
                     opacity = 0,
@@ -79,25 +80,24 @@ local function flight(k, f)
                         } },
                         scale = { duration = RISE, keyframes = {
                             1,
-                            { value = 1, duration = RISE },
+                            { value = 1,     duration = RISE },
                             { value = 1.035, duration = 170, easing = "out_cubic" },
-                            { value = 1, duration = 480, easing = "in_out_quad" },
+                            { value = 1,     duration = 480, easing = "in_out_quad" },
                         } },
                     },
                     children = {
                         cards.card {
                             m = m,
                             picture = f.path,
-                            scheme = f.scheme or nil,
+                            scheme = f.scheme,
                             dress = D,
                             title = P.base_name(name),
-                            meta = (name:match("%.([^.]+)$") or ""):upper(),
+                            meta = f.meta,
                             front = 1,
                             current = true,
                             pop = RISE,
                             favourite = P.settings.favorites:map(function(favs) return P.has(favs, name) end),
                         },
-                        -- Light crosses the picture.
                         rect {
                             margin = { left = m.thumb.x, top = m.thumb.y },
                             width = m.thumb.width,
@@ -114,9 +114,9 @@ local function flight(k, f)
                                     progress = 1.35,
                                     animate = { progress = { duration = 820, keyframes = {
                                         -1,
-                                        { value = -1, duration = RISE },
+                                        { value = -1,    duration = RISE },
                                         { value = -0.35, duration = 0 },
-                                        { value = 1.35, duration = 820, easing = "in_out_sine" },
+                                        { value = 1.35,  duration = 820, easing = "in_out_sine" },
                                     } } },
                                 },
                             },
@@ -125,7 +125,6 @@ local function flight(k, f)
                 },
             },
         },
-        -- The picture, from its place on the card to the whole screen: the wallpaper.
         rect {
             align_h = "center",
             align_v = "center",
@@ -136,15 +135,10 @@ local function flight(k, f)
             translate = { x = 0, y = 0 },
             opacity = 1,
             animate = {
-                width = { duration = 1000, easing = "in_out_cubic", delay = SET, from = m.thumb.width * k_mid },
-                height = { duration = 1000, easing = "in_out_cubic", delay = SET, from = m.thumb.height * k_mid },
-                radius = { duration = 1000, easing = "in_out_cubic", delay = SET, from = m.thumb_radius * k_mid },
-                translate = {
-                    duration = 1000,
-                    easing = "in_out_cubic",
-                    delay = SET,
-                    from = { x = 0, y = (m.thumb.y + m.thumb.height / 2 - m.height / 2) * k_mid },
-                },
+                width = grow(m.thumb.width * k_mid),
+                height = grow(m.thumb.height * k_mid),
+                radius = grow(m.thumb_radius * k_mid),
+                translate = grow({ x = 0, y = (m.thumb.y + m.thumb.height / 2 - m.height / 2) * k_mid }),
                 opacity = { duration = 1, delay = SET, from = 0 },
             },
             children = {
@@ -157,12 +151,7 @@ local function flight(k, f)
                     async = true,
                     scale = 1,
                     animate = {
-                        scale = {
-                            duration = 1000,
-                            easing = "in_out_cubic",
-                            delay = SET,
-                            from = math.max(m.thumb.width * k_mid / k.w, m.thumb.height * k_mid / k.h),
-                        },
+                        scale = grow(math.max(m.thumb.width * k_mid / k.w, m.thumb.height * k_mid / k.h)),
                     },
                 },
             },

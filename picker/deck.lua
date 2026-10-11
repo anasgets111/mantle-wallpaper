@@ -27,9 +27,15 @@ local function arm(k, e, moved, scheme, desk)
         local d = (pos[e.path] or h.idx) - h.idx
         local ad = math.abs(d)
         return {
-            d = d, ad = ad, s = d < 0 and -1 or 1, near = d == 0 and 1 or 0,
+            d = d,
+            ad = ad,
+            s = d < 0 and -1 or 1,
+            near = d == 0 and 1 or 0,
             down = not h.open or not h.dealt or h.picked ~= "",
-            open = h.open, dealt = h.dealt, picked = h.picked, dealing = h.dealing,
+            open = h.open,
+            dealt = h.dealt,
+            picked = h.picked,
+            dealing = h.dealing,
         }
     end)
     local function tilt(p) return p.s * 0.1 * 180 / math.pi end
@@ -71,7 +77,6 @@ local function arm(k, e, moved, scheme, desk)
             }
         end),
         children = {
-            -- Hovered, a card further back lifts.
             rect {
                 translate = computed({ hov, place }, function(on, p)
                     return { x = 0, y = (on and p.near < 0.5) and -20 * u or 0 }
@@ -93,7 +98,7 @@ local function arm(k, e, moved, scheme, desk)
                                 scheme = scheme,
                                 dress = desk,
                                 title = P.base_name(e.name),
-                                meta = (e.name:match("%.([^.]+)$") or ""):upper(),
+                                meta = cards.meta(e),
                                 front = place:map(function(p) return p.near end),
                                 dim = computed({ hov, place }, function(on, p)
                                     return on and 0 or math.min(0.3, math.max(0, p.ad - 0.6) * 0.065)
@@ -105,6 +110,12 @@ local function arm(k, e, moved, scheme, desk)
                                     local i = positions:get()[e.path]
                                     if not i then return end
                                     if i == P.index:get() then P.pick() else P.go(i) end
+                                end,
+                                on_double_click = function()
+                                    local i = positions:get()[e.path]
+                                    if not i then return end
+                                    P.go(i)
+                                    P.pick()
                                 end,
                             },
                         },
@@ -129,7 +140,7 @@ local function deck(k)
         width = "fill",
         height = "fill",
         hittable = false,
-        translate = P.peek:map(function(on) return { x = 0, y = on and k.peek_drop or 0 } end),
+        translate = P.peeking:map(function(on) return { x = 0, y = on and k.peek_drop or 0 } end),
         animate = { translate = { duration = 300, easing = "out_cubic" } },
         children = {
             -- The arms all stand on the same spot: each one's width is taken back by the spacing.

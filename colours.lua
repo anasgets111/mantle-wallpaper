@@ -62,7 +62,7 @@ M.known:set(copy(memo))
 M.progress:set({ read = 0, total = 0 })
 
 local pending, running, read, total = {}, 0, 0, 0
-local center = function() return 1 end
+local function center() return 1 end
 local finished = {}
 local flush_timer
 
@@ -92,9 +92,9 @@ local function pump()
             running = running - 1
             read = read + 1
             if roles then
-                local c_ = { source = seed }
-                for _, r in ipairs(ROLES) do c_[r] = roles[r] end
-                memo[e.name] = { m = e.modified, c = c_ }
+                local scheme = { source = seed }
+                for _, r in ipairs(ROLES) do scheme[r] = roles[r] end
+                memo[e.name] = { m = e.modified, c = scheme }
             else
                 memo[e.name] = { m = e.modified, e = true }
             end
@@ -158,7 +158,6 @@ function M.hue_key(known, name)
     return (h + 0.035) % 1
 end
 
--- A scheme's dress.
 function M.dress_of(s)
     return {
         surface = s.surface_container,
@@ -176,14 +175,13 @@ end
 -- The desktop's dress: the wallpaper on screen's scheme, else the Material defaults.
 M.desktop_dress = M.desktop:map(function(d) return d and M.dress_of(d) or theme.DRESS end)
 
--- The five chips on a card, top to bottom.
 function M.chips(s)
     return {
-        { label = "primary", fill = s.primary },
+        { label = "primary",   fill = s.primary },
         { label = "secondary", fill = s.secondary },
-        { label = "tertiary", fill = s.tertiary },
+        { label = "tertiary",  fill = s.tertiary },
         { label = "container", fill = s.primary_container },
-        { label = "surface", fill = s.surface_container_highest },
+        { label = "surface",   fill = s.surface_container_highest },
     }
 end
 

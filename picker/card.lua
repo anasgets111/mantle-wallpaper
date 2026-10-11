@@ -6,11 +6,11 @@ local colours = require("colours")
 
 local M = {}
 
-local POP = { scale = { duration = 200, keyframes = {
+local POP = {
     0.4,
     { value = 1.12, duration = 200, easing = "out_cubic" },
-    { value = 1, duration = 160, easing = "in_out_quad" },
-} } }
+    { value = 1,    duration = 160, easing = "in_out_quad" },
+}
 
 -- The card's measures at `u` design pixels per pixel.
 function M.measure(u)
@@ -22,27 +22,42 @@ function M.measure(u)
     -- Text boxes are font_size × line_height (1.2).
     local height = pad + thumb_h + 8 * u + chip_h * 5 + 9 * u + 13 * u * 1.2 + 2 * u + 10 * u * 1.2 + pad + 2 * u
     return {
-        u = u, pad = pad, width = width, height = height, chip_h = chip_h,
-        radius = 16 * u, thumb_radius = 10 * u,
+        u = u,
+        pad = pad,
+        width = width,
+        height = height,
+        chip_h = chip_h,
+        radius = 16 * u,
+        thumb_radius = 10 * u,
         thumb = { x = pad, y = pad, width = thumb_w, height = thumb_h },
     }
 end
 
+local function bytes(n)
+    if n >= 1048576 then return string.format("%.1f MB", n / 1048576) end
+    return math.max(1, math.floor(n / 1024 + 0.5)) .. " KB"
+end
+
+-- The line under a card's name: `JPG  ·  2.4 MB`.
+function M.meta(e)
+    local parts = { (e.name:match("%.([^.]+)$") or ""):upper() }
+    if e.size and e.size > 0 then parts[#parts + 1] = bytes(e.size) end
+    return table.concat(parts, "  ·  ")
+end
+
 -- Number `v` (or a signal of one) through `fn`.
 local function each(v, fn)
-    if type(v) == "number" or type(v) == "boolean" then
-        return fn(v)
-    end
+    if type(v) == "number" then return fn(v) end
     return v:map(fn)
 end
 
 -- The wallpaper on screen now. A plain `current = true` builds the tag; `pop` (ms) makes it pop in
 -- that long after it's built, hidden until then: showing a hidden node would cancel its animation.
-function M.tag(opts, dress, u)
-    if opts.current == false or opts.current == nil then return nil end
+local function tag(opts, dress, u)
+    if not opts.current then return nil end
     return row {
         id = "current",
-        visible = type(opts.current) ~= "boolean" and opts.current or true,
+        visible = opts.current,
         align_v = "end",
         margin = { left = 7 * u, bottom = 7 * u },
         height = 19 * u,
@@ -54,7 +69,7 @@ function M.tag(opts, dress, u)
         scale = 1,
         opacity = 1,
         animate = opts.pop and {
-            scale = { duration = POP.scale.duration, delay = opts.pop, keyframes = POP.scale.keyframes },
+            scale = { duration = 200, delay = opts.pop, keyframes = POP },
             opacity = { duration = 1, delay = opts.pop, from = 0 },
         } or nil,
         children = {
@@ -72,8 +87,8 @@ function M.tag(opts, dress, u)
 end
 
 -- opts: m (measure), picture, title, meta, scheme (nil until read), dress (worn without a
--- scheme), front (0..1), dim, current, favourite, pop (ms until the "current" tag pops in), on_click,
--- hover.
+-- scheme), front (0..1, or a signal), dim, current (true or a signal), favourite, pop (ms until the
+-- "current" tag pops in), hover, on_click, on_double_click.
 function M.card(opts)
     local m, u = opts.m, opts.m.u
     local dress = opts.scheme and colours.dress_of(opts.scheme) or opts.dress or theme.DRESS
@@ -133,6 +148,7 @@ function M.card(opts)
         end),
         hover = opts.hover,
         hittable = true,
+        on_double_click = opts.on_double_click,
         cursor = "pointer",
         on_click = opts.on_click,
         animate = { border_width = 380, border_color = 380, shadows = 380 },
@@ -167,7 +183,7 @@ function M.card(opts)
                                     theme.glyph("favorite", 14 * u, "#ff5c7a", { filled = true, translate = { x = 0, y = 0.5 * u } }),
                                 },
                             },
-                            M.tag(opts, dress, u),
+                            tag(opts, dress, u),
                         },
                     },
                     column { margin = { top = 8 * u }, children = chips },
@@ -190,7 +206,6 @@ function M.card(opts)
                     },
                 },
             },
-            -- Shade over a card further back, lifted while hovered.
             rect {
                 width = "fill",
                 height = "fill",

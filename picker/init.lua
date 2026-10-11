@@ -15,26 +15,10 @@ local flight = require("picker.flight")
 local ribbon = require("picker.ribbon")
 local settings_card = require("picker.settings")
 local P = require("picker.model")
-local SIDE = P.SIDE
-local SOURCES = P.SOURCES
-local SORTS = P.SORTS
-local open = P.open
-local mapped = P.mapped
-local index = P.index
-local source = P.source
-local sort = P.sort
-local peek = P.peek
-local chosen = P.chosen
-local geo = P.geo
-local entries = P.entries
-local hand = P.hand
-local go = P.go
-local step = P.step
-local cycle = P.cycle
-local toggle_favourite = P.toggle_favourite
-local close = P.close
-local pick = P.pick
-local drag = P.drag
+local SIDE, SOURCES, SORTS = P.SIDE, P.SOURCES, P.SORTS
+local index, source, sort, peek, chosen, choosing = P.index, P.source, P.sort, P.peek, P.chosen, P.choosing
+local entries, geo, drag = P.entries, P.geo, P.drag
+local hand, go, step, cycle, close, pick = P.hand, P.go, P.step, P.cycle, P.close, P.pick
 local BACKDROP = mantle.config_dir .. "/shaders/backdrop.frag"
 
 -- Escape, once per press (the panel's `on_escape`): the settings card, then the peek, then the
@@ -44,6 +28,15 @@ local function on_escape()
     elseif P.settings_open:get() then P.set_settings(false)
     elseif peek:get() then peek:set(false)
     else close() end
+end
+
+local space_tap, space_timer = false, nil
+
+local function on_key_release(key)
+    if key.name ~= "space" or not P.peek_held:get() then return false end
+    P.peek_held:set(false)
+    if space_tap then peek:set(not peek:get()) end
+    return true
 end
 
 local function on_key(key)
@@ -62,9 +55,15 @@ local function on_key(key)
     elseif name == "Next" or name == "Page_Down" then step(SIDE)
     elseif name == "Return" or name == "KP_Enter" then pick()
     elseif name == "space" then
-        if not again then peek:set(not peek:get()) end
+        -- Held, it peeks until released; a tap under 240 ms keeps the peek (or ends a kept one).
+        if not again then
+            P.peek_held:set(true)
+            space_tap = true
+            if space_timer then space_timer:cancel() end
+            space_timer = timer(240, function() space_tap = false end)
+        end
     elseif name == "f" or name == "F" then
-        if not again then toggle_favourite() end
+        if not again then P.toggle_favourite() end
     elseif name == "s" or name == "S" then
         if not again then P.set_sort(cycle(SORTS, sort:get(), 1)) end
     elseif name == "r" or name == "R" then
@@ -91,7 +90,7 @@ end
 
 -- Drag anywhere to turn the deck; a drag is not a click.
 local drag_from = nil
-local function on_drag(_, pointer, phase)
+local function on_drag(_, pointer, phase, _, velocity)
     local g = geo:get()
     if chosen:get() ~= "" or not g or g.width == 0 then return end
     if phase == "start" then
@@ -101,12 +100,14 @@ local function on_drag(_, pointer, phase)
         local k = hand(g)
         local dx = pointer.x - drag_from.x
         if math.abs(dx) > 4 then drag.moved = true end
-        if drag.moved then go(math.floor(drag_from.index - dx / (k.step_n * k.r) + 0.5)) end
+        local at = drag_from.index - dx / (k.step_n * k.r)
+        -- A flick carries on a little: 0.2 s of its release speed, in cards.
+        if phase == "end" and velocity then at = at - velocity.x / (k.step_n * k.r) * 0.2 end
+        if drag.moved then go(math.floor(at + 0.5)) end
         if phase == "end" then drag_from = nil end
     end
 end
 
-local choosing = P.choosing
 local backdrop_source = delay(computed({ entries, index, chosen }, function(list, i, c)
     if c ~= "" then return c end
     return list[i] and list[i].path or ""
@@ -115,7 +116,6 @@ end), 110)
 local function layers(g)
     local k = hand(g)
     return {
-        -- The desktop dimmed, until the picture is in.
         rect {
             width = "fill",
             height = "fill",
@@ -123,7 +123,6 @@ local function layers(g)
             opacity = choosing:map(function(c) return c and 0 or 0.55 end),
             animate = { opacity = { duration = 420, easing = "out_cubic" } },
         },
-        -- The card in front at full size.
         image {
             id = "backdrop",
             width = "fill",
@@ -143,10 +142,9 @@ local function layers(g)
                     { 0.5, "#00000000" }, { 0.78, "#0000002e" }, { 1, "#00000099" },
                 },
             },
-            opacity = computed({ peek, choosing }, function(p, c) return c and 0 or p and 0.15 or 1 end),
+            opacity = computed({ P.peeking, choosing }, function(p, c) return c and 0 or p and 0.15 or 1 end),
             animate = { opacity = { duration = 300, easing = "out_cubic" } },
         },
-        -- Dimmed behind a chosen card.
         rect {
             width = "fill",
             height = "fill",
@@ -197,7 +195,7 @@ return panel {
     anchor = { top = true, bottom = true, left = true, right = true },
     exclusive_zone = "ignore",
     keyboard_interactivity = "exclusive",
-    visible = mapped,
+    visible = P.mapped,
     on_escape = on_escape,
     reset_on_close = P.RESET_ON_CLOSE,
     child = rect {
@@ -210,12 +208,13 @@ return panel {
         focus_ring = false,
         cursor = "default",
         on_key = on_key,
+        on_key_release = on_key_release,
         on_wheel = on_wheel,
         on_drag = on_drag,
         on_click = function()
             if not drag.moved and chosen:get() == "" then peek:set(not peek:get()) end
         end,
-        opacity = open:map(function(on) return on and 1 or 0 end),
+        opacity = P.open:map(function(on) return on and 1 or 0 end),
         animate = { opacity = chrome.SHOWN },
         children = {
             -- Built in a list's `each`, which runs outside a map's 2.5 ms budget: the whole

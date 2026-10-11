@@ -110,7 +110,8 @@ local function folder_section(u)
             padding = { left = 14 * u, right = 14 * u },
             background = C("ink", 0.06),
             border_width = 1,
-            border_color = computed({ field_focus, tint }, function(on, d) return on and d.accent or theme.alpha(d.ink, 0.12) end),
+            border_color = computed({ field_focus, tint }, function(on, d) return on and d.accent or
+                theme.alpha(d.ink, 0.12) end),
             children = {
                 textfield {
                     focus_target = focus_target("picker.folder"),
@@ -224,7 +225,8 @@ local function choice_section(u)
             },
         },
         note(on:map(function(x)
-            return x and "The card comes to the middle of the screen and grows into the wallpaper, then the picker closes."
+            return x and
+                "The card comes to the middle of the screen and grows into the wallpaper, then the picker closes."
                 or "The wallpaper changes straight away and the deck stays open, for more browsing."
         end), nil, u),
     }
@@ -264,14 +266,10 @@ local function card(k)
         },
         rect { height = 4 * u },
     }
-    local function add(list)
-        for _, node in ipairs(list) do body[#body + 1] = node end
+    for i, section in ipairs({ folder_section(u), transition_section(u), choice_section(u) }) do
+        if i > 1 then body[#body + 1] = rect { height = 8 * u } end
+        table.move(section, 1, #section, #body + 1, body)
     end
-    add(folder_section(u))
-    body[#body + 1] = rect { height = 8 * u }
-    add(transition_section(u))
-    body[#body + 1] = rect { height = 8 * u }
-    add(choice_section(u))
     return column {
         id = "settings",
         align_h = "end",
@@ -300,7 +298,7 @@ local function layer(k)
         hittable = false,
         -- Over the ribbon, as the card hangs across it.
         z = 10,
-        children = computed({ P.settings_open, P.peek, P.chosen }, function(on, p, c)
+        children = computed({ P.settings_open, P.peeking, P.chosen }, function(on, p, c)
             if not on or p or c ~= "" then return {} end
             return { card(k) }
         end),

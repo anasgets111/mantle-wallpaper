@@ -23,6 +23,7 @@ local tint = P.tint
 local FADE = { duration = 420, easing = "out_cubic" }
 -- A hover answers at once; only the tint itself fades.
 local SNAP = { duration = 90, easing = "out_cubic" }
+local DIM = { duration = 300, easing = "out_cubic" } -- the chrome hiding and showing
 local function C(key, a)
     return tint:map(function(d) return a and theme.alpha(d[key], a) or d[key] end)
 end
@@ -33,6 +34,10 @@ local SHOWN = computed({ open, chosen }, function(on, c)
     if on then return { duration = 380, easing = "out_cubic", from = 0 } end
     return { duration = c ~= "" and 340 or 240, easing = "in_cubic" }
 end)
+
+local no_entries = entries:map(function(list) return #list == 0 end)
+local has_entries = entries:map(function(list) return #list > 0 end)
+local uncovered = P.uncovered
 
 local function glass(props)
     props.background = props.background or C("low", 0.8)
@@ -92,7 +97,10 @@ local function segments(id, options, value, u, on_pick)
             animate = { background = SNAP },
             on_click = function() on_pick(o.key) end,
             children = {
-                theme.glyph(o.icon, 17 * u, computed({ current, tint }, function(on, d) return on and d.accent_ink or d.muted end), {
+                theme.glyph(o.icon, 17 * u, computed({ current, tint }, function(on, d)
+                    return on and d.accent_ink or
+                        d.muted
+                end), {
                     variations = current:map(function(on) return { FILL = on and 1 or 0, wght = 500 } end),
                 }),
                 text {
@@ -127,12 +135,12 @@ local function head(k)
         width = k.w - 80 * u,
         height = 44 * u,
         margin = { left = 40 * u, top = 28 * u },
-        opacity = P.covered:map(function(on) return on and 0 or 1 end),
-        translate = computed({ open, peek, chosen }, function(on, p, c)
+        opacity = uncovered,
+        translate = computed({ open, P.peeking, chosen }, function(on, p, c)
             return { x = 0, y = -(on and 0 or 18 * u) - ((p or c ~= "") and 24 * u or 0) }
         end),
         animate = {
-            opacity = { duration = 300, easing = "out_cubic" },
+            opacity = DIM,
             translate = { duration = 380, easing = "out_cubic", from = { x = 0, y = -18 * u } },
         },
         children = {
@@ -155,11 +163,9 @@ local function head(k)
                 align_v = "center",
                 children = {
                     segments("source", {
-                        { key = "local", label = "Local", icon = "photo_library" },
+                        { key = "local",     label = "Local",   icon = "photo_library" },
                         { key = "favorites", label = fav_label, icon = "favorite" },
-                    }, source, u, function(key)
-                        P.set_source(key)
-                    end),
+                    }, source, u, P.set_source),
                 },
             },
             row {
@@ -189,12 +195,10 @@ local function head(k)
                         },
                     },
                     segments("sort", {
-                        { key = "name", label = "Name", icon = "sort_by_alpha" },
+                        { key = "name",   label = "Name",   icon = "sort_by_alpha" },
                         { key = "colour", label = "Colour", icon = "palette" },
                         { key = "newest", label = "Newest", icon = "schedule" },
-                    }, sort, u, function(key)
-                        P.set_sort(key)
-                    end),
+                    }, sort, u, P.set_sort),
                     round_button("settings", "settings", u, function() P.set_settings(not P.settings_open:get()) end),
                     round_button("peek", "visibility", u, function() peek:set(not peek:get()) end),
                     round_button("close", "close", u, close),
@@ -204,7 +208,6 @@ local function head(k)
     }
 end
 
--- Under the head: the keys.
 local function hints(k)
     local u = k.u
     return glass {
@@ -214,9 +217,9 @@ local function hints(k)
         padding = { left = 14 * u, right = 14 * u },
         radius = 20 * u,
         background = C("low", 0.6),
-        visible = entries:map(function(list) return #list > 0 end),
-        opacity = P.covered:map(function(on) return on and 0 or 1 end),
-        animate = { opacity = { duration = 300, easing = "out_cubic" } },
+        visible = has_entries,
+        opacity = uncovered,
+        animate = { opacity = DIM },
         children = {
             text {
                 align_v = "center",
@@ -240,11 +243,11 @@ local function actions(k)
         align_h = "center",
         margin = { top = k.front_top - 40 * u - 20 * u },
         spacing = 8 * u,
-        visible = entries:map(function(list) return #list > 0 end),
-        opacity = computed({ open, dealt, peek, chosen }, function(on, d, p, c)
+        visible = has_entries,
+        opacity = computed({ open, dealt, P.peeking, chosen }, function(on, d, p, c)
             return (on and d and not p and c == "") and 1 or 0
         end),
-        translate = computed({ open, dealt, peek, chosen }, function(on, d, p, c)
+        translate = computed({ open, dealt, P.peeking, chosen }, function(on, d, p, c)
             local down = not on or not d or c ~= ""
             return { x = 0, y = (down and 60 * u or 0) + (p and 40 * u or 0) }
         end),
@@ -264,7 +267,10 @@ local function actions(k)
                 animate = { background = SNAP, border_color = FADE },
                 on_click = toggle_favourite,
                 children = {
-                    theme.glyph("favorite", 20 * u, computed({ fav, tint }, function(on, d) return on and "#ff5c7a" or d.ink end), {
+                    theme.glyph("favorite", 20 * u, computed({ fav, tint }, function(on, d)
+                        return on and "#ff5c7a" or
+                            d.ink
+                    end), {
                         variations = fav:map(function(on) return { FILL = on and 1 or 0, wght = 500 } end),
                         translate = { x = 0, y = 1 },
                     }),
@@ -325,14 +331,14 @@ local function actions(k)
     }
 end
 
--- Nothing to deal.
 local function empty(k)
     local u = k.u
+    local folder_hover = hover("picker.folder_button")
     return column {
         align_h = "center",
         align_v = "center",
         spacing = 12 * u,
-        visible = entries:map(function(list) return #list == 0 end),
+        visible = no_entries,
         children = {
             text {
                 align_h = "center",
@@ -358,8 +364,8 @@ local function empty(k)
                 padding = { left = 16 * u, right = 16 * u },
                 spacing = 8 * u,
                 radius = 20 * u,
-                hover = hover("picker.folder_button"),
-                background = computed({ hover("picker.folder_button"), tint }, function(over, d)
+                hover = folder_hover,
+                background = computed({ folder_hover, tint }, function(over, d)
                     return over and theme.lighter(d.accent, 1.08) or d.accent
                 end),
                 on_click = function() P.set_settings(true) end,
@@ -378,7 +384,6 @@ local function empty(k)
     }
 end
 
--- While peeking: how to get back.
 local function peek_hint(k)
     local u = k.u
     return glass {
@@ -390,7 +395,7 @@ local function peek_hint(k)
         spacing = 10 * u,
         radius = 20 * u,
         opacity = computed({ peek, chosen }, function(p, c) return (p and c == "") and 1 or 0 end),
-        animate = { opacity = { duration = 300, easing = "out_cubic" } },
+        animate = { opacity = DIM },
         children = {
             text {
                 align_v = "center",
@@ -409,4 +414,4 @@ local function peek_hint(k)
     }
 end
 
-return { C = C, FADE = FADE, SHOWN = SHOWN, glass = glass, head = head, hints = hints, actions = actions, empty = empty, peek_hint = peek_hint }
+return { C = C, SHOWN = SHOWN, head = head, hints = hints, actions = actions, empty = empty, peek_hint = peek_hint }

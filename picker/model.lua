@@ -4,7 +4,6 @@ local cards = require("picker.card")
 local colours = require("colours")
 
 local settings = wallpaper.settings
-local u_of = function(g) return math.max(0.6, math.min(g.width / 1920, g.height / 1200)) end
 
 local EXTENSIONS = { "jpg", "jpeg", "png", "webp", "gif" }
 local SIDE = 7 -- cards shown each side of the one in front
@@ -19,7 +18,11 @@ local index = state("picker.index", 1)
 local shift = state("picker.shift", 0)
 local source = state("picker.source", "local")
 local sort = state("picker.sort", "name")
+-- Peeking: the deck steps aside. `peek` is kept (a tap, the button, a click on the picture);
+-- `peek_held` lasts while Space is down.
 local peek = state("picker.peek", false)
+local peek_held = state("picker.peek_held", false)
+local peeking = computed({ peek, peek_held }, function(kept, held) return kept or held end)
 -- False while the hand is put away for a new source or order.
 local dealt = state("picker.dealt", true)
 -- A reload drops the timer that deals the hand back in.
@@ -27,7 +30,7 @@ dealt:set(true)
 local chosen = state("picker.chosen", "")
 -- The chosen card as it was chosen: { path, scheme, dress, peek }, so its flight doesn't follow
 -- later changes; false the rest of the time.
----@alias Flown { path: string, scheme: table|false, dress: table, peek: boolean }|false
+---@alias Flown { path: string, scheme: table|false, dress: table, meta: string, peek: boolean }|false
 ---@type StateSignal<Flown>
 local flown = state("picker.flown", false)
 local settings_open = state("picker.settings_open", false)
@@ -37,7 +40,9 @@ local deal = state("picker.deal", 0)
 local landed = computed({ chosen, delay(chosen, 1250) }, function(c, was) return c ~= "" and c == was end)
 local choosing = chosen:map(function(c) return c ~= "" end)
 -- Something covers the deck: a peek or a chosen card.
-local covered = computed({ peek, chosen }, function(p, c) return p or c ~= "" end)
+local covered = computed({ peeking, chosen }, function(p, c) return p or c ~= "" end)
+-- The chrome's opacity under that.
+local uncovered = covered:map(function(on) return on and 0 or 1 end)
 local geo = geometry("picker.root")
 -- The colour sort's keys, taken when it's chosen and when a scan finishes, so the deck doesn't
 -- reshuffle as each colour is read.
@@ -76,7 +81,7 @@ local entries = computed({ listing, settings.favorites, source, sort, hues }, fu
     local list = {}
     for i, e in ipairs(all) do
         if src ~= "favorites" or has(favs, e.name) then
-            list[#list + 1] = { name = e.name, path = e.path, modified = e.modified, at = i }
+            list[#list + 1] = { name = e.name, path = e.path, modified = e.modified, size = e.size, at = i }
         end
     end
     local function by(key)
@@ -98,15 +103,22 @@ local function front_entry() return entries:get()[index:get()] end
 
 -- The deck's geometry for a screen `g`, in pixels (QML design units scaled by `u`).
 local function hand(g)
-    local u = u_of(g)
+    local u = math.max(0.6, math.min(g.width / 1920, g.height / 1200))
     local m = cards.measure(u)
     local pivot_y = g.height + 1650 * u
     local r = pivot_y - (g.height - 196 * u)
     local lift = 66 * u
     return {
-        u = u, m = m, w = g.width, h = g.height,
-        pivot_x = g.width / 2, pivot_y = pivot_y, r = r, lift = lift,
-        step1 = 204 * u / r, step_n = 132 * u / r,
+        u = u,
+        m = m,
+        w = g.width,
+        h = g.height,
+        pivot_x = g.width / 2,
+        pivot_y = pivot_y,
+        r = r,
+        lift = lift,
+        step1 = 204 * u / r,
+        step_n = 132 * u / r,
         front_scale = 1.22,
         -- Top of the card in front, at rest.
         front_top = pivot_y - r - lift - m.height * 1.22 / 2,
@@ -122,7 +134,6 @@ local function theta(k, d)
     return (d < 0 and -t or t) * 180 / math.pi
 end
 
--- ── Moving through the deck ──────────────────────────────────────────────
 local function go(i)
     local count = #entries:get()
     if count == 0 or chosen:get() ~= "" then return end
@@ -139,17 +150,13 @@ local function step(d) go(index:get() + d) end
 -- The card in front stays in front across a new list, else the wallpaper on screen does.
 local function refocus(prefer)
     local list = entries:get()
-    local i
-    for n, e in ipairs(list) do
-        if e.path == prefer then i = n end
-    end
-    if not i then
+    local function find(path)
         for n, e in ipairs(list) do
-            if e.path == settings.current:get() then i = n end
+            if e.path == path then return n end
         end
     end
     shift:set(0)
-    index:set(i or 1)
+    index:set(find(prefer) or find(settings.current:get()) or 1)
 end
 
 -- A new source or order: the hand is put away, `change` made out of sight, and the new hand dealt.
@@ -204,9 +211,8 @@ local function toggle_favourite()
     settings:set("favorites", out)
 end
 
--- ── Opening, choosing, closing ───────────────────────────────────────────
 -- What the panel resets when it unmaps (`reset_on_close`).
-local RESET_ON_CLOSE = { chosen, flown, settings_open, peek, wallpaper.instant }
+local RESET_ON_CLOSE = { chosen, flown, settings_open, peek, peek_held, wallpaper.instant }
 
 local function close() open:set(false) end
 
@@ -223,6 +229,7 @@ local function show()
     chosen:set("")
     flown:set(false)
     peek:set(false)
+    peek_held:set(false)
     wallpaper.instant:set(false)
     deal:set(deal:get() + 1)
     source:set("local")
@@ -256,7 +263,8 @@ local function pick()
         path = e.path,
         scheme = scheme or false,
         dress = scheme and colours.dress_of(scheme) or colours.desktop_dress:get(),
-        peek = peek:get(),
+        meta = cards.meta(e),
+        peek = peeking:get(),
     })
     wallpaper.set(e.path, true)
     -- The flight's animations end here (flight.lua); nothing reports it, so a timer closes.
@@ -288,12 +296,15 @@ return {
     source = source,
     sort = sort,
     peek = peek,
+    peek_held = peek_held,
+    peeking = peeking,
     dealt = dealt,
     chosen = chosen,
     landed = landed,
     choosing = choosing,
     flown = flown,
     covered = covered,
+    uncovered = uncovered,
     deal = deal,
     RESET_ON_CLOSE = RESET_ON_CLOSE,
     geo = geo,
@@ -307,17 +318,13 @@ return {
     set_settings = set_settings,
     set_sort = set_sort,
     set_source = set_source,
-    front_entry = front_entry,
     hand = hand,
     theta = theta,
     go = go,
     step = step,
-    refocus = refocus,
-    reshuffle = reshuffle,
     cycle = cycle,
     toggle_favourite = toggle_favourite,
     close = close,
-    show = show,
     pick = pick,
     drag = drag,
     wallpaper = wallpaper,

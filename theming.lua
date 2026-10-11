@@ -42,19 +42,11 @@ local function follow()
     local path = settings.current:get()
     if path == shown or path == "" then return end
     shown = path
-    local function done(seed, dark)
+    colours.read(path, function(seed, dark)
         if shown ~= path or not dark then return end
         colours.desktop:set(dark)
         apply(seed, dark)
-    end
-    -- The picker usually read it already: its seed gives the scheme without decoding the image.
-    -- The cache is keyed by file name in the wallpaper folder.
-    local folder, name = path:match("^(.*)/([^/]*)$")
-    local cached = folder == wallpaper.expand(settings.dir:get()) and colours.known:get()[name]
-    if cached and cached.c and cached.c.source then
-        return done(cached.c.source, palette.scheme(cached.c.source, { dark = true }))
-    end
-    colours.read(path, done)
+    end)
 end
 follow()
 mantle.storage:on_change(follow)
