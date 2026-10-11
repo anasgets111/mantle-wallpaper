@@ -25,21 +25,18 @@ local function ribbon(k)
         return math.max(1, math.min(n, math.floor(x / seg(n)) + 1))
     end
 
-    local segments = computed({ P.entries, colours.known }, function(list, known)
-        local out, w = {}, seg(#list)
+    -- One node for the whole track: a segment per wallpaper as hard gradient stops.
+    local track_fill = computed({ P.entries, colours.known }, function(list, known)
+        local n = #list
+        if n == 0 then return "#00000000" end
+        if n == 1 then return colours.swatch(known, list[1].name) or "#ffffff24" end
+        local stops = {}
         for i, e in ipairs(list) do
-            local r = i == 1 and 1 or 0
-            local l = i == #list and 1 or 0
-            out[i] = rect {
-                margin = { left = (i - 1) * w },
-                width = w + 0.6,
-                height = "fill",
-                -- Rounded ends: a radius past half the height is shrunk to fit.
-                radius = { top_left = r * 99, bottom_left = r * 99, top_right = l * 99, bottom_right = l * 99 },
-                background = colours.swatch(known, e.name) or "#ffffff24",
-            }
+            local c = colours.swatch(known, e.name) or "#ffffff24"
+            stops[#stops + 1] = { (i - 1) / n, c }
+            stops[#stops + 1] = { i / n, c }
         end
-        return out
+        return { gradient = "linear", angle = 90, stops = stops }
     end)
 
     local glimpse_index = computed({ ptr, P.entries }, function(p, list)
@@ -57,7 +54,7 @@ local function ribbon(k)
         height = height + 12 * u,
         z = 5,
         visible = count:map(function(n) return n > 0 end),
-        opacity = computed({ P.peek, P.chosen }, function(p, c) return (p or c ~= "") and 0 or 1 end),
+        opacity = P.covered:map(function(on) return on and 0 or 1 end),
         animate = { opacity = { duration = 300, easing = "out_cubic" } },
         hover = hov,
         pointer = ptr,
@@ -85,8 +82,10 @@ local function ribbon(k)
                         align_v = "center",
                         width = width,
                         height = track_h,
+                        -- Rounded ends: a radius past half the height is shrunk to fit.
+                        radius = 99 * u,
+                        background = track_fill,
                         animate = { height = { duration = 160, easing = "out_cubic" } },
-                        children = segments,
                     },
                     -- Favourites: ticks over the track.
                     rect {

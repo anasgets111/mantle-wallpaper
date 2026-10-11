@@ -43,29 +43,38 @@ local function copy(t)
     return out
 end
 
--- What's been read, kept here so results landing together don't race the store's push.
+-- What's been read, kept here so results landing together don't race the store's push. The
+-- stored cache is merged in once, when the store first pushes it.
 local memo = copy(cache.entries:get() or {})
+local loaded = next(memo) ~= nil
 mantle.storage:on_change(function()
-    local stored, added = cache.entries:get() or {}, false
+    if loaded then return end
+    local stored = cache.entries:get() or {}
+    if next(stored) == nil then return end
+    loaded = true
     for k, v in pairs(stored) do
-        if memo[k] == nil then memo[k], added = v, true end
+        if memo[k] == nil then memo[k] = v end
     end
-    if added then M.known:set(copy(memo)) end
+    M.known:set(copy(memo))
 end)
 M.known:set(copy(memo))
+-- A reload drops a running scan.
+M.progress:set({ read = 0, total = 0 })
 
 local pending, running, read, total = {}, 0, 0, 0
 local center = function() return 1 end
 local finished = {}
 local flush_timer
 
+-- The live colours follow every 250 ms; the file is written once the scan is done.
 local function flush()
     flush_timer = nil
-    M.known:set(copy(memo))
-    cache:set("entries", copy(memo))
+    local now = copy(memo)
+    M.known:set(now)
     local done = #pending == 0 and running == 0
     M.progress:set({ read = read, total = done and 0 or total })
     if done then
+        cache:set("entries", now)
         for _, fn in ipairs(finished) do fn() end
     end
 end

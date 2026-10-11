@@ -10,7 +10,7 @@ local ERROR = "#ffb4ab"
 -- "", "checking", "missing", "failed", "relative" or "saved".
 local status = state("picker.folder.status", "")
 local draft = state("picker.folder.draft", "")
-local pending = ""
+local pending = "" -- the folder last asked for: a later Enter wins over an earlier answer
 
 -- Each opening starts clean.
 P.settings_open:on_change(function(on)
@@ -22,8 +22,9 @@ end)
 
 local function count_line(n) return (n == 1 and "1 wallpaper" or n .. " wallpapers") .. " here." end
 
-local function use_folder()
-    settings:set("dir", pending)
+local function use_folder(typed)
+    if typed ~= pending then return end
+    settings:set("dir", typed)
     status:set("saved")
 end
 
@@ -36,15 +37,18 @@ local function apply_folder(text)
     if abs:sub(1, 1) ~= "/" then return status:set("relative") end
     pending = typed
     status:set("checking")
-    process.run("test", { "-d", abs }, function() end, function(code)
-        if code == 0 then use_folder() else status:set("missing") end
+    process.capture("test", { "-d", abs }, function(_, code)
+        if typed ~= pending then return end
+        if code == 0 then use_folder(typed) else status:set("missing") end
     end)
 end
 
 local function create_folder()
+    local typed = pending
     status:set("checking")
-    process.run("mkdir", { "-p", wallpaper.expand(pending) }, function() end, function(code)
-        if code == 0 then use_folder() else status:set("failed") end
+    process.capture("mkdir", { "-p", wallpaper.expand(typed) }, function(_, code)
+        if typed ~= pending then return end
+        if code == 0 then use_folder(typed) else status:set("failed") end
     end)
 end
 

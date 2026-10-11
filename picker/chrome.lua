@@ -127,7 +127,7 @@ local function head(k)
         width = k.w - 80 * u,
         height = 44 * u,
         margin = { left = 40 * u, top = 28 * u },
-        opacity = computed({ peek, chosen }, function(p, c) return (p or c ~= "") and 0 or 1 end),
+        opacity = P.covered:map(function(on) return on and 0 or 1 end),
         translate = computed({ open, peek, chosen }, function(on, p, c)
             return { x = 0, y = -(on and 0 or 18 * u) - ((p or c ~= "") and 24 * u or 0) }
         end),
@@ -215,7 +215,7 @@ local function hints(k)
         radius = 20 * u,
         background = C("low", 0.6),
         visible = entries:map(function(list) return #list > 0 end),
-        opacity = computed({ peek, chosen }, function(p, c) return (p or c ~= "") and 0 or 1 end),
+        opacity = P.covered:map(function(on) return on and 0 or 1 end),
         animate = { opacity = { duration = 300, easing = "out_cubic" } },
         children = {
             text {

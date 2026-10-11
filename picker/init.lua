@@ -25,7 +25,6 @@ local source = P.source
 local sort = P.sort
 local peek = P.peek
 local chosen = P.chosen
-local stage = P.stage
 local geo = P.geo
 local entries = P.entries
 local hand = P.hand
@@ -38,18 +37,24 @@ local pick = P.pick
 local drag = P.drag
 local BACKDROP = mantle.config_dir .. "/shaders/backdrop.frag"
 
+-- Escape, once per press (the panel's `on_escape`): the settings card, then the peek, then the
+-- picker; a chosen card's flight is cut short.
+local function on_escape()
+    if chosen:get() ~= "" then close()
+    elseif P.settings_open:get() then P.set_settings(false)
+    elseif peek:get() then peek:set(false)
+    else close() end
+end
+
 local function on_key(key)
     local name = key.name
-    if chosen:get() ~= "" then
-        if name == "Escape" and not key["repeat"] then close() end
-        return true
-    end
+    -- Escape goes on to `on_escape`; while a card is chosen nothing else does anything.
+    if name == "Escape" then return false end
+    if chosen:get() ~= "" then return true end
     local count = #entries:get()
-    if name == "Escape" then
-        if P.settings_open:get() then P.set_settings(false)
-        elseif peek:get() then peek:set(false)
-        else close() end
-    elseif name == "Left" or name == "Up" then step(-1)
+    -- A held key repeats only what browsing should repeat.
+    local again = key["repeat"]
+    if name == "Left" or name == "Up" then step(-1)
     elseif name == "Right" or name == "Down" then step(1)
     elseif name == "Home" then go(1)
     elseif name == "End" then go(count)
@@ -57,14 +62,15 @@ local function on_key(key)
     elseif name == "Next" or name == "Page_Down" then step(SIDE)
     elseif name == "Return" or name == "KP_Enter" then pick()
     elseif name == "space" then
-        if not key["repeat"] then peek:set(not peek:get()) end
-    elseif name == "f" or name == "F" then toggle_favourite()
+        if not again then peek:set(not peek:get()) end
+    elseif name == "f" or name == "F" then
+        if not again then toggle_favourite() end
     elseif name == "s" or name == "S" then
-        P.set_sort(cycle(SORTS, sort:get(), 1))
+        if not again then P.set_sort(cycle(SORTS, sort:get(), 1)) end
     elseif name == "r" or name == "R" then
         if count > 1 then go((index:get() + math.random(1, count - 1) - 1) % count + 1) end
     elseif name == "Tab" or name == "ISO_Left_Tab" then
-        P.set_source(cycle(SOURCES, source:get(), name == "Tab" and 1 or -1))
+        if not again then P.set_source(cycle(SOURCES, source:get(), name == "Tab" and 1 or -1)) end
     else
         return false
     end
@@ -100,14 +106,13 @@ local function on_drag(_, pointer, phase)
     end
 end
 
-local choosing = chosen:map(function(c) return c ~= "" end)
+local choosing = P.choosing
 local backdrop_source = delay(computed({ entries, index, chosen }, function(list, i, c)
     if c ~= "" then return c end
     return list[i] and list[i].path or ""
 end), 110)
 
 local function layers(g)
-    if not g or g.width == 0 then return {} end
     local k = hand(g)
     return {
         -- The desktop dimmed, until the picture is in.
@@ -149,22 +154,29 @@ local function layers(g)
             opacity = choosing:map(function(c) return c and 0.55 or 0 end),
             animate = { opacity = { duration = 1000, easing = "in_out_quad" } },
         },
-        deck(k),
-        chrome.actions(k),
-        chrome.head(k),
-        ribbon(k),
-        chrome.hints(k),
-        chrome.empty(k),
-        chrome.peek_hint(k),
+        -- Gone by the time a chosen card lands: hidden, nothing in it is laid out while the
+        -- picture grows.
+        rect {
+            width = "fill",
+            height = "fill",
+            visible = P.landed:map(function(on) return not on end),
+            children = {
+                deck(k),
+                chrome.actions(k),
+                chrome.head(k),
+                ribbon(k),
+                chrome.hints(k),
+                chrome.empty(k),
+                chrome.peek_hint(k),
+            },
+        },
         settings_card(k),
         rect {
             width = "fill",
             height = "fill",
             -- The flight takes no pointer: the blocker below it does, while it flies.
             hittable = false,
-            children = computed({ chosen, stage }, function(c, st)
-                return c ~= "" and flight(k, c, st) or {}
-            end),
+            children = P.flown:map(function(f) return f and flight(k, f) or {} end),
         },
         -- Nothing under a chosen card takes the pointer.
         rect {
@@ -186,6 +198,8 @@ return panel {
     exclusive_zone = "ignore",
     keyboard_interactivity = "exclusive",
     visible = mapped,
+    on_escape = on_escape,
+    reset_on_close = P.RESET_ON_CLOSE,
     child = rect {
         geometry = geo,
         width = "fill",
@@ -203,6 +217,18 @@ return panel {
         end,
         opacity = open:map(function(on) return on and 1 or 0 end),
         animate = { opacity = chrome.SHOWN },
-        children = geo:map(layers),
+        children = {
+            -- Built in a list's `each`, which runs outside a map's 2.5 ms budget: the whole
+            -- picker is more than a map should build.
+            list {
+                width = "fill",
+                height = "fill",
+                items = geo:map(function(g) return (g and g.width > 0) and { g } or {} end),
+                key = function(g) return g.width .. "x" .. g.height end,
+                each = function(g)
+                    return rect { width = "fill", height = "fill", children = layers(g) }
+                end,
+            },
+        },
     },
 }

@@ -36,8 +36,8 @@ local function each(v, fn)
     return v:map(fn)
 end
 
--- The wallpaper on screen now. A plain `current = true` builds the tag, popping in when `pop` is
--- set: showing a hidden node would cancel its animation.
+-- The wallpaper on screen now. A plain `current = true` builds the tag; `pop` (ms) makes it pop in
+-- that long after it's built, hidden until then: showing a hidden node would cancel its animation.
 function M.tag(opts, dress, u)
     if opts.current == false or opts.current == nil then return nil end
     return row {
@@ -52,7 +52,11 @@ function M.tag(opts, dress, u)
         background = dress.accent,
         origin = { x = 0, y = 0.5 },
         scale = 1,
-        animate = opts.pop and POP or nil,
+        opacity = 1,
+        animate = opts.pop and {
+            scale = { duration = POP.scale.duration, delay = opts.pop, keyframes = POP.scale.keyframes },
+            opacity = { duration = 1, delay = opts.pop, from = 0 },
+        } or nil,
         children = {
             theme.glyph("check", 12 * u, dress.accent_ink, { weight = 700 }),
             text {
@@ -68,7 +72,8 @@ function M.tag(opts, dress, u)
 end
 
 -- opts: m (measure), picture, title, meta, scheme (nil until read), dress (worn without a
--- scheme), front (0..1), dim, current, favourite, pop (the "current" tag pops in), on_click, hover.
+-- scheme), front (0..1), dim, current, favourite, pop (ms until the "current" tag pops in), on_click,
+-- hover.
 function M.card(opts)
     local m, u = opts.m, opts.m.u
     local dress = opts.scheme and colours.dress_of(opts.scheme) or opts.dress or theme.DRESS

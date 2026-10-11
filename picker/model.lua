@@ -22,9 +22,22 @@ local sort = state("picker.sort", "name")
 local peek = state("picker.peek", false)
 -- False while the hand is put away for a new source or order.
 local dealt = state("picker.dealt", true)
+-- A reload drops the timer that deals the hand back in.
+dealt:set(true)
 local chosen = state("picker.chosen", "")
-local stage = state("picker.stage", "") -- "", "rise", "bloom"
+-- The chosen card as it was chosen: { path, scheme, dress, peek }, so its flight doesn't follow
+-- later changes; false the rest of the time.
+---@alias Flown { path: string, scheme: table|false, dress: table, peek: boolean }|false
+---@type StateSignal<Flown>
+local flown = state("picker.flown", false)
 local settings_open = state("picker.settings_open", false)
+-- Bumped at each opening: a new hand is dealt.
+local deal = state("picker.deal", 0)
+-- The chosen card has reached the middle; the hand and chrome are gone by then.
+local landed = computed({ chosen, delay(chosen, 1250) }, function(c, was) return c ~= "" and c == was end)
+local choosing = chosen:map(function(c) return c ~= "" end)
+-- Something covers the deck: a peek or a chosen card.
+local covered = computed({ peek, chosen }, function(p, c) return p or c ~= "" end)
 local geo = geometry("picker.root")
 -- The colour sort's keys, taken when it's chosen and when a scan finishes, so the deck doesn't
 -- reshuffle as each colour is read.
@@ -32,7 +45,15 @@ local hues = state("picker.hues", {})
 local dealing = computed({ pulse(open, 800), pulse(dealt, 800) }, function(a, b) return a or b end)
 
 local function dir() return wallpaper.expand(settings.dir:get()) end
-local function watch() mantle.folders:watch(dir(), EXTENSIONS) end
+-- Watched again only when the folder setting changes: a repeated watch re-pushes the listing.
+local watched = nil
+local function watch()
+    local d = dir()
+    if d == watched then return end
+    if watched then mantle.folders:unwatch(watched) end
+    watched = d
+    mantle.folders:watch(d, EXTENSIONS)
+end
 watch()
 mantle.storage:on_change(watch)
 
@@ -184,15 +205,10 @@ local function toggle_favourite()
 end
 
 -- ── Opening, choosing, closing ───────────────────────────────────────────
-local function close()
-    open:set(false)
-    timer(400, function()
-        if open:get() then return end
-        chosen:set("")
-        stage:set("")
-        wallpaper.instant:set(false)
-    end)
-end
+-- What the panel resets when it unmaps (`reset_on_close`).
+local RESET_ON_CLOSE = { chosen, flown, settings_open, peek, wallpaper.instant }
+
+local function close() open:set(false) end
 
 -- Opens or closes the settings card; closed, the keys go back to the deck. Call from a click or
 -- key handler: only those can move focus.
@@ -202,10 +218,13 @@ local function set_settings(on)
 end
 
 local function show()
+    -- Reopened inside the close hold, the panel never unmapped: reset by hand too.
     settings_open:set(false)
     chosen:set("")
-    stage:set("")
+    flown:set(false)
     peek:set(false)
+    wallpaper.instant:set(false)
+    deal:set(deal:get() + 1)
     source:set("local")
     refocus(nil)
     open:set(true)
@@ -231,12 +250,16 @@ local function pick()
         return
     end
     if settings_open:get() then set_settings(false) end
+    local scheme = colours.scheme(colours.known:get(), e.name)
     chosen:set(e.path)
-    stage:set("rise")
+    flown:set({
+        path = e.path,
+        scheme = scheme or false,
+        dress = scheme and colours.dress_of(scheme) or colours.desktop_dress:get(),
+        peek = peek:get(),
+    })
     wallpaper.set(e.path, true)
-    timer(1250, function()
-        if chosen:get() == e.path then stage:set("bloom") end
-    end)
+    -- The flight's animations end here (flight.lua); nothing reports it, so a timer closes.
     timer(1250 + 900 + 1000, function()
         if chosen:get() == e.path and open:get() then close() end
     end)
@@ -267,7 +290,12 @@ return {
     peek = peek,
     dealt = dealt,
     chosen = chosen,
-    stage = stage,
+    landed = landed,
+    choosing = choosing,
+    flown = flown,
+    covered = covered,
+    deal = deal,
+    RESET_ON_CLOSE = RESET_ON_CLOSE,
     geo = geo,
     dealing = dealing,
     base_name = base_name,

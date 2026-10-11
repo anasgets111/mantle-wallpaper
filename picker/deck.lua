@@ -119,11 +119,8 @@ local function deck(k)
     local m = k.m
     -- path -> { node, look }: a card is rebuilt only when its colours change. `each` builds them:
     -- it runs outside the Lua budget a map has, and building a whole hand takes longer than that.
-    local built, was_open = {}, false
-    local window = computed({ P.entries, P.index, P.open }, function(list, idx, on)
-        -- Each opening deals a new hand.
-        if on and not was_open then built = {} end
-        was_open = on
+    local built = {}
+    local window = computed({ P.entries, P.index }, function(list, idx)
         local out = {}
         for i = math.max(1, idx - SIDE), math.min(#list, idx + SIDE) do out[#out + 1] = list[i] end
         return out
@@ -145,11 +142,20 @@ local function deck(k)
                 each = function(e)
                     local scheme = colours.scheme(colours.known:get(), e.name)
                     local desk = colours.desktop_dress:get()
-                    local look = (scheme and scheme.source or "") .. desk.accent .. desk.surface
+                    -- Each opening deals a new hand.
+                    local deal = P.deal:get()
+                    local look = deal .. (scheme and scheme.source or "") .. desk.accent .. desk.surface
                     local have = built[e.path]
                     if not have or have.look ~= look then
-                        have = { node = arm(k, e, have and 0 or P.shift:get(), scheme, desk), look = look }
+                        local fresh = not have or have.deal ~= deal
+                        have = { node = arm(k, e, fresh and P.shift:get() or 0, scheme, desk), look = look, deal = deal }
                         built[e.path] = have
+                        -- Cards that left the hand start fresh when they come back.
+                        local keep = {}
+                        for _, w in ipairs(window:get()) do keep[w.path] = true end
+                        for path in pairs(built) do
+                            if not keep[path] then built[path] = nil end
+                        end
                     end
                     return have.node
                 end,
