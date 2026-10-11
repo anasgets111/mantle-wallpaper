@@ -13,6 +13,7 @@ local chrome = require("picker.chrome")
 local deck = require("picker.deck")
 local flight = require("picker.flight")
 local ribbon = require("picker.ribbon")
+local settings_card = require("picker.settings")
 local P = require("picker.model")
 local SIDE = P.SIDE
 local SOURCES = P.SOURCES
@@ -45,7 +46,9 @@ local function on_key(key)
     end
     local count = #entries:get()
     if name == "Escape" then
-        if peek:get() then peek:set(false) else close() end
+        if P.settings_open:get() then P.set_settings(false)
+        elseif peek:get() then peek:set(false)
+        else close() end
     elseif name == "Left" or name == "Up" then step(-1)
     elseif name == "Right" or name == "Down" then step(1)
     elseif name == "Home" then go(1)
@@ -153,9 +156,12 @@ local function layers(g)
         chrome.hints(k),
         chrome.empty(k),
         chrome.peek_hint(k),
+        settings_card(k),
         rect {
             width = "fill",
             height = "fill",
+            -- The flight takes no pointer: the blocker below it does, while it flies.
+            hittable = false,
             children = computed({ chosen, stage }, function(c, st)
                 return c ~= "" and flight(k, c, st) or {}
             end),
@@ -185,6 +191,7 @@ return panel {
         width = "fill",
         height = "fill",
         accessible_name = "Wallpapers",
+        focus_target = focus_target("picker.root"),
         autofocus = true,
         focus_ring = false,
         cursor = "default",

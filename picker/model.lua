@@ -24,6 +24,7 @@ local peek = state("picker.peek", false)
 local dealt = state("picker.dealt", true)
 local chosen = state("picker.chosen", "")
 local stage = state("picker.stage", "") -- "", "rise", "bloom"
+local settings_open = state("picker.settings_open", false)
 local geo = geometry("picker.root")
 -- The colour sort's keys, taken when it's chosen and when a scan finishes, so the deck doesn't
 -- reshuffle as each colour is read.
@@ -193,7 +194,15 @@ local function close()
     end)
 end
 
+-- Opens or closes the settings card; closed, the keys go back to the deck. Call from a click or
+-- key handler: only those can move focus.
+local function set_settings(on)
+    settings_open:set(on)
+    if not on then focus_target("picker.root"):request() end
+end
+
 local function show()
+    settings_open:set(false)
     chosen:set("")
     stage:set("")
     peek:set(false)
@@ -216,6 +225,12 @@ end)
 local function pick()
     local e = front_entry()
     if not e or chosen:get() ~= "" or e.path == settings.current:get() then return end
+    -- Turned off, it's set straight away and the deck stays open.
+    if not settings.animate_choice:get() then
+        wallpaper.set(e.path)
+        return
+    end
+    if settings_open:get() then set_settings(false) end
     chosen:set(e.path)
     stage:set("rise")
     wallpaper.set(e.path, true)
@@ -260,6 +275,8 @@ return {
     entries = entries,
     listing = listing,
     tint = tint,
+    settings_open = settings_open,
+    set_settings = set_settings,
     set_sort = set_sort,
     set_source = set_source,
     front_entry = front_entry,

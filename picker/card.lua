@@ -127,6 +127,7 @@ function M.card(opts)
             } }
         end),
         hover = opts.hover,
+        hittable = true,
         cursor = "pointer",
         on_click = opts.on_click,
         animate = { border_width = 380, border_color = 380, shadows = 380 },

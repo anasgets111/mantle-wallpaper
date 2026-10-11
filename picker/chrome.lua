@@ -80,6 +80,7 @@ local function segments(id, options, value, u, on_pick)
         local hov = hover("picker.seg:" .. id .. ":" .. o.key)
         local current = value:map(function(v) return v == o.key end)
         items[#items + 1] = row {
+            align_v = "center",
             height = 32 * u,
             padding = { left = 14 * u, right = 14 * u },
             spacing = 6 * u,
@@ -194,6 +195,7 @@ local function head(k)
                     }, sort, u, function(key)
                         P.set_sort(key)
                     end),
+                    round_button("settings", "settings", u, function() P.set_settings(not P.settings_open:get()) end),
                     round_button("peek", "visibility", u, function() peek:set(not peek:get()) end),
                     round_button("close", "close", u, close),
                 },
@@ -347,6 +349,30 @@ local function empty(k)
                 end),
                 font_size = 16 * u,
                 foreground = "#ffffff",
+            },
+            -- The way out of an empty folder.
+            row {
+                visible = computed({ source, P.settings_open }, function(s, open_) return s == "local" and not open_ end),
+                align_h = "center",
+                height = 40 * u,
+                padding = { left = 16 * u, right = 16 * u },
+                spacing = 8 * u,
+                radius = 20 * u,
+                hover = hover("picker.folder_button"),
+                background = computed({ hover("picker.folder_button"), tint }, function(over, d)
+                    return over and theme.lighter(d.accent, 1.08) or d.accent
+                end),
+                on_click = function() P.set_settings(true) end,
+                children = {
+                    theme.glyph("folder_open", 18 * u, C("accent_ink")),
+                    text {
+                        align_v = "center",
+                        content = "Choose another folder",
+                        font_size = 14 * u,
+                        font_weight = 600,
+                        foreground = C("accent_ink"),
+                    },
+                },
             },
         },
     }
