@@ -236,7 +236,9 @@ local function set_settings(on)
     if not on then focus_target("picker.root"):request() end
 end
 
-local function show()
+-- Each opening, by `wallpaper.toggle` or by writing `picker.open` (`mantle toggle picker.open`).
+open:on_change(function(on)
+    if not on then return end
     -- Reopened inside the close hold, the panel never unmapped: reset by hand too.
     settings_open:set(false)
     chosen:set("")
@@ -247,17 +249,14 @@ local function show()
     deal:set(deal:get() + 1)
     source:set("local")
     refocus(nil)
-    open:set(true)
     -- Colours for the cards near the one in front first.
     colours.ensure(listing:get(), function()
         local e = front_entry()
         return e and e.at or 1
     end)
-end
-
-action("wallpaper.toggle", function()
-    if open:get() then close() else show() end
 end)
+
+action("wallpaper.toggle", function() open:set(not open:get()) end)
 
 -- The card in front goes to the middle of the screen, the wallpaper is set under the picker, the
 -- picture grows into it, and the picker goes.
